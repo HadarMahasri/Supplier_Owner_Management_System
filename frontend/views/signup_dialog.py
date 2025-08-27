@@ -1,10 +1,11 @@
 # frontend/views/signup_dialog.py
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, QRadioButton,
-    QButtonGroup, QFrame, QScrollArea, QWidget, QCheckBox
+    QButtonGroup, QFrame, QScrollArea, QWidget
 )
 from PySide6.QtCore import Qt
 from services.auth_service import AuthService
+from views.widgets.service_areas_picker import ServiceAreasPicker  # הרכיב החדש לבחירת אזורי שירות
 
 
 class SignUpDialog(QDialog):
@@ -18,37 +19,24 @@ class SignUpDialog(QDialog):
         self.created_username = None
         self.created_password = None
 
-        # --- נסיון לטעון גיאוגרפיה; אם נכשל – לא קורסים ---
+        # נסיון לטעינת גיאוגרפיה; אם נכשל – לא מציגים אזורי שירות
         self.geo_tree = []
         self._geo_ok = True
         try:
             from services.geo_service import fetch_districts_with_cities
-            self.geo_tree = fetch_districts_with_cities()
+            self.geo_tree = fetch_districts_with_cities()  # מחזיר [{district_id, district_name, cities:[{city_id, city_name}]}]
         except Exception:
             self._geo_ok = False
-        self.selected_city_ids = set()
 
-        # --- עיצוב ---
+        # --- עיצוב בסיסי ---
         self.setStyleSheet("""
-            QDialog {
-                background: #f3f4f6;
-                font-family: 'Segoe UI', Arial, sans-serif;
-                direction: rtl;
-            }
-            QFrame#Card {
-                background: #fff;
-                border-radius: 16px;
-                border: 1px solid rgba(0,0,0,0.06);
-            }
+            QDialog { background: #f3f4f6; font-family: 'Segoe UI', Arial, sans-serif; direction: rtl; }
+            QFrame#Card { background: #fff; border-radius: 16px; border: 1px solid rgba(0,0,0,0.06); }
             QLabel#Title { font-size: 22px; font-weight: 800; color: #1f2937; }
             QLabel.FieldLabel { font-weight: 600; color: #374151; margin: 12px 0 6px; }
             QLabel#Error { color:#dc2626; font-size:13px; padding:8px; background:#fef2f2; border-radius:8px; }
-            QLineEdit {
-                padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px;
-            }
-            QLineEdit:focus {
-                border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15);
-            }
+            QLineEdit { padding: 10px 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; }
+            QLineEdit:focus { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.15); }
             QRadioButton { font-weight:600; color:#334155; margin: 0 10px; }
             QScrollArea { border: 1px solid #e2e8f0; border-radius: 12px; background: #f9fafb; }
             QPushButton { padding: 12px 16px; border-radius: 10px; font-weight: 700; border: none; }
@@ -56,23 +44,16 @@ class SignUpDialog(QDialog):
             QPushButton#Primary:hover { background:#1d4ed8; }
         """)
 
-        # --- מבנה כללי עם גלילה ---
-        root = QVBoxLayout(self)
-        root.setContentsMargins(20, 20, 20, 20)
-
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        # --- מבנה עם גלילה ---
+        root = QVBoxLayout(self); root.setContentsMargins(20, 20, 20, 20)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         root.addWidget(scroll)
 
-        host = QWidget()
-        scroll.setWidget(host)
+        host = QWidget(); scroll.setWidget(host)
         host_layout = QVBoxLayout(host)
 
         card = QFrame(objectName="Card")
-        card_layout = QVBoxLayout(card)
-        card_layout.setContentsMargins(24, 24, 24, 24)
-        card_layout.setSpacing(12)
+        card_layout = QVBoxLayout(card); card_layout.setContentsMargins(24, 24, 24, 24); card_layout.setSpacing(12)
         host_layout.addWidget(card)
 
         title = QLabel("הרשמה", objectName="Title", alignment=Qt.AlignCenter)
@@ -92,76 +73,59 @@ class SignUpDialog(QDialog):
         role_row.addStretch(1)
         card_layout.addLayout(role_row)
 
-        # --- בנאי שדות: שומר גם את התוויות כדי להסתיר/להציג נכון ---
+        # helper לשדות + שמירת תוויות לשליטה ב־visible
         self._labels = {}
-        def add_field(container_layout, label_text, widget):
-            lbl = QLabel(label_text); lbl.setProperty("class", "FieldLabel"); lbl.setObjectName("FieldLabel")
+        def add_field(lbl_txt, widget):
+            lbl = QLabel(lbl_txt); lbl.setProperty("class", "FieldLabel"); lbl.setObjectName("FieldLabel")
             lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            container_layout.addWidget(lbl)
-            container_layout.addWidget(widget)
+            card_layout.addWidget(lbl); card_layout.addWidget(widget)
             self._labels[widget] = lbl
             return widget
 
         # --- שדות משותפים ---
-        self.ed_company = add_field(card_layout, "שם החברה (לספק, אופציונלי)", QLineEdit())
-        self.ed_contact = add_field(card_layout, "איש קשר *", QLineEdit())
-        self.ed_phone   = add_field(card_layout, "טלפון *", QLineEdit())
-        self.ed_email   = add_field(card_layout, "אימייל *", QLineEdit("name@example.com"))
+        self.ed_company = add_field("שם החברה (לספק, אופציונלי)", QLineEdit())
+        self.ed_contact = add_field("איש קשר *", QLineEdit())
+        self.ed_phone   = add_field("טלפון *", QLineEdit())
+        self.ed_email   = add_field("אימייל *", QLineEdit("name@example.com"))
 
-        # --- שדות בעל חנות ---
-        self.ed_city   = add_field(card_layout, "עיר *", QLineEdit("הקלידי שם עיר..."))
-        self.ed_street = add_field(card_layout, "רחוב *", QLineEdit())
-        self.ed_house  = add_field(card_layout, "מספר בית *", QLineEdit())
+        # --- בעל חנות: כתובת/שעות ---
+        self.ed_city   = add_field("עיר *", QLineEdit("הקלידי שם עיר..."))
+        self.ed_street = add_field("רחוב *", QLineEdit())
+        self.ed_house  = add_field("מספר בית *", QLineEdit())
 
         hours_row = QHBoxLayout()
-        self.ed_open = QLineEdit("HH:MM")
+        self.ed_open  = QLineEdit("HH:MM")
         self.ed_close = QLineEdit("HH:MM")
-        hours_col1 = QVBoxLayout(); hours_col1.addWidget(QLabel("שעת פתיחה *", alignment=Qt.AlignRight)); hours_col1.addWidget(self.ed_open)
-        hours_col2 = QVBoxLayout(); hours_col2.addWidget(QLabel("שעת סגירה *", alignment=Qt.AlignRight)); hours_col2.addWidget(self.ed_close)
-        hours_row.addLayout(hours_col1); hours_row.addLayout(hours_col2)
+        c1 = QVBoxLayout(); c1.addWidget(QLabel("שעת פתיחה *", alignment=Qt.AlignRight)); c1.addWidget(self.ed_open)
+        c2 = QVBoxLayout(); c2.addWidget(QLabel("שעת סגירה *", alignment=Qt.AlignRight)); c2.addWidget(self.ed_close)
+        hours_row.addLayout(c1); hours_row.addLayout(c2)
         card_layout.addLayout(hours_row)
-        # נשמור גם את תוויות השעות במפה כדי לשלוט בהצגה
-        self._labels[self.ed_open]  = hours_col1.itemAt(0).widget()
-        self._labels[self.ed_close] = hours_col2.itemAt(0).widget()
+        self._labels[self.ed_open]  = c1.itemAt(0).widget()
+        self._labels[self.ed_close] = c2.itemAt(0).widget()
 
-        # --- אזורי שירות לספק (אם נטענו) ---
-        self.area_label = QLabel("אזורי שירות (לספק): בחרי ערים"); self.area_label.setProperty("class", "FieldLabel")
+        # --- ספק: אזורי שירות (Picker חדש במקום area_label + area_scroll הישנים) ---
+        self.area_title = QLabel("אזורי שירות (בחרי מחוזות שלמים או ערים ספציפיות):")
+        self.area_title.setProperty("class", "FieldLabel")
         if self._geo_ok and self.geo_tree:
-            card_layout.addWidget(self.area_label)
-            self.area_scroll = QScrollArea(); self.area_scroll.setWidgetResizable(True); self.area_scroll.setMaximumHeight(260)
-            area = QWidget(); area_layout = QVBoxLayout(area); area_layout.setContentsMargins(12, 8, 12, 8)
-            self._city_checkboxes = []
-            for d in self.geo_tree:
-                hdr = QLabel(f"— {d['district_name']} —"); hdr.setStyleSheet("font-weight:600; color:#374151; margin:6px 0;")
-                area_layout.addWidget(hdr)
-                for c in d["cities"]:
-                    cb = QCheckBox(c["city_name"])
-                    cb.stateChanged.connect(lambda st, cid=c["city_id"]: self._toggle_city(cid, st))
-                    self._city_checkboxes.append(cb)
-                    area_layout.addWidget(cb)
-            self.area_scroll.setWidget(area)
-            card_layout.addWidget(self.area_scroll)
+            card_layout.addWidget(self.area_title)
+            self.areas = ServiceAreasPicker(self.geo_tree)  # ← הרכיב החדש
+            card_layout.addWidget(self.areas, 1)
         else:
-            # פלייסהולדר אם אין גיאוגרפיה – שלא נקרוס
-            self.area_scroll = QWidget()
-            self.area_label.hide()
-            self.area_scroll.hide()
+            self.areas = None
+            self.area_title.hide()
 
-        # --- שם משתמש וסיסמה ---
-        self.ed_user = add_field(card_layout, "שם משתמש *", QLineEdit())
-        self.ed_pass = add_field(card_layout, "סיסמה *", QLineEdit())
-        self.ed_pass.setEchoMode(QLineEdit.Password)
+        # --- שם משתמש/סיסמה ---
+        self.ed_user = add_field("שם משתמש *", QLineEdit())
+        self.ed_pass = add_field("סיסמה *", QLineEdit()); self.ed_pass.setEchoMode(QLineEdit.Password)
 
-        # --- הודעת שגיאה ---
-        self.lbl_msg = QLabel("", objectName="Error", alignment=Qt.AlignCenter)
-        self.lbl_msg.hide()
+        # --- שגיאה + כפתור ---
+        self.lbl_msg = QLabel("", objectName="Error", alignment=Qt.AlignCenter); self.lbl_msg.hide()
         card_layout.addWidget(self.lbl_msg)
 
-        # --- כפתור שמירה ---
         self.btn_save = QPushButton("שמור פרטי ספק", objectName="Primary")
         card_layout.addWidget(self.btn_save)
 
-        # --- חיבורים ---
+        # wiring
         self._toggle_role_ui()
         self.rb_supplier.toggled.connect(self._toggle_role_ui)
         self.btn_save.clicked.connect(self._submit)
@@ -169,14 +133,12 @@ class SignUpDialog(QDialog):
     # ----- UI helpers -----
     def _toggle_role_ui(self):
         is_supplier = self.rb_supplier.isChecked()
-
-        # כפתור
         self.btn_save.setText("שמור פרטי ספק" if is_supplier else "שמור בעל חנות")
 
-        # ספק: מציגים שם חברה + אזורי שירות, מסתירים פרטי חנות
         self._set_visible(self.ed_company, is_supplier)
-        self.area_label.setVisible(is_supplier and self._geo_ok)
-        self.area_scroll.setVisible(is_supplier and self._geo_ok)
+        if self.areas:
+            self.area_title.setVisible(is_supplier)
+            self.areas.setVisible(is_supplier)
 
         owner_widgets = [self.ed_city, self.ed_street, self.ed_house, self.ed_open, self.ed_close]
         for w in owner_widgets:
@@ -186,12 +148,6 @@ class SignUpDialog(QDialog):
         widget.setVisible(visible)
         if widget in self._labels:
             self._labels[widget].setVisible(visible)
-
-    def _toggle_city(self, cid: int, state: int):
-        if state:
-            self.selected_city_ids.add(cid)
-        else:
-            self.selected_city_ids.discard(cid)
 
     # ----- Submit -----
     def _submit(self):
@@ -203,7 +159,6 @@ class SignUpDialog(QDialog):
         if not self.ed_contact.text().strip() or not self.ed_phone.text().strip() or \
            not self.ed_user.text().strip() or not self.ed_pass.text().strip():
             return self._err("יש למלא את כל שדות החובה")
-
         if not re.match(r"^[^\s@]+@[^\s@]+\.[^\s@]{2,}$", email):
             return self._err("אימייל לא תקין")
 
@@ -217,7 +172,7 @@ class SignUpDialog(QDialog):
             "userType": role,
             "city_id": None, "street": None, "house_number": None,
             "opening_time": None, "closing_time": None,
-            "serviceCities": list(self.selected_city_ids) if role == "Supplier" else [],
+            "serviceCities": list(self.areas.selected_ids()) if (role == "Supplier" and self.areas) else [],
         }
 
         if role == "StoreOwner":
@@ -233,7 +188,6 @@ class SignUpDialog(QDialog):
 
         ok, user_id, err = self.auth.register_user(payload)
         if ok:
-            # כדי שה-Login ימלא אוטומטית
             self.created_username = payload["username"]
             self.created_password = payload["password"]
             self.accept()
@@ -241,6 +195,7 @@ class SignUpDialog(QDialog):
             self._err(err or "שגיאה בהרשמה")
 
     def _resolve_city_id(self, city_name: str):
+        # מאתר city_id מתוך self.geo_tree
         if not (self._geo_ok and self.geo_tree and city_name):
             return None
         for d in self.geo_tree:
