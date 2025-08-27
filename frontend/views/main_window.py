@@ -9,6 +9,7 @@ from pathlib import Path
 
 from views.pages.login_page import LoginPage
 from views.pages.signup_page import SignUpPage
+from views.pages.supplier_home import SupplierHome
 
 
 class MainWindow(QMainWindow):
@@ -102,8 +103,24 @@ class MainWindow(QMainWindow):
             self.background_label.resize(self.size())
         super().resizeEvent(event)
 
+    
     def _on_login_ok(self, user: dict):
         self.statusBar().showMessage(f"שלום {user.get('username')}", 5000)
+
+        # בדיקה אם המשתמש הוא ספק
+        if user.get("userType") == "Supplier":
+            supplier_page = SupplierHome(user)
+            # כשמבקשים התנתקות מהעמוד → חוזרים לעמוד ההתחברות
+            supplier_page.logout_requested.connect(lambda: self.stack.setCurrentWidget(self.page_login))
+            
+            self.stack.addWidget(supplier_page)
+            self.stack.setCurrentWidget(supplier_page)
+
+        # אם זה בעל חנות (בינתיים אפשר להשאיר כ-not implemented)
+        elif user.get("userType") == "StoreOwner":
+            self.statusBar().showMessage("עמוד בעל חנות עדיין לא ממומש", 5000)
+            # בעתיד כאן נטען StoreOwnerHome
+
 
     def _on_signup_ok(self, username: str, password: str):
         self.page_login.prefill(username, password)
