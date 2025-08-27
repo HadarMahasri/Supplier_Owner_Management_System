@@ -1,79 +1,82 @@
 # backend/main.py
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, Session
-from contextlib import asynccontextmanager
-import os
-from dotenv import load_dotenv
+from sqlalchemy import text
 
-from models.supplier_model import Base
-from gateway.gateway_router import gateway_router
-from config.database import get_database_url
+# חשוב: המודול שמרכז את ההתחברות למסד (engine + get_db)
+# ראו database/session.py כפי שהצעתי קודם (odbc_connect ל-SQL Server בענן)
+from database.session import engine  # אם תרצה גם get_db לתלויות: from database.session import get_db
 
-load_dotenv()
+# ראוטרים (users חובה; אחרים אופציונליים)
+from routers.users_router import router as users_router
 
-# Database setup
-DATABASE_URL = get_database_url()
-engine = create_engine(DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+# אופציונלי: אם יש לך router נוסף (gateway), ננסה לייבא, ואם לא — מתעלמים
+try:
+    from gateway.gateway_router import gateway_router
+    HAS_GATEWAY = True
+except Exception:
+    HAS_GATEWAY = False
 
-# Create tables
-Base.metadata.create_all(bind=engine)
+# --------- יצירת האפליקציה ---------
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="Supplier Management System API",
+        description="מערכת ניהול ספקים",
+        version="1.0.0",
+    )
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup
-    print("🚀 Starting Supplier Management System...")
-    yield
-    # Shutdown
-    print("🛑 Shutting down...")
+    # CORS (בפיתוח אפשר *, בייצור להחליף לרשימת דומיינים)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
-# FastAPI app
-app = FastAPI(
-    title="Supplier Management System API",
-    description="מערכת ניהול ספקים עם יכולות AI",
-    version="1.0.0",
-    lifespan=lifespan
-)
+    # לוג עלייה/כיבוי
+    @app.on_event("startup")
+    async def _on_startup():
+        print("🚀 Starting Supplier Management System...")
+        # בדיקת DB ראשונית – תדפיס שגיאה אם יש
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            print("✅ DB connected")
+        except Exception as e:
+            print(f"❌ DB connection failed: {e}")
 
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # בסביבת פיתוח - בייצור להגביל לדומיינים ספציפיים
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+    @app.on_event("shutdown")
+    async def _on_shutdown():
+        print("🛑 Shutting down...")
 
-# Security
-security = HTTPBearer()
+    # בריאות מערכת (בודק DB בפועל)
+    @app.get("/health")
+    async def health():
+        try:
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            return {"status": "healthy", "database": "connected"}
+        except Exception as e:
+            return {"status": "degraded", "database": f"error: {e.__class__.__name__}"}
 
-def get_db():
-    """Dependency to get database session"""
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+    # דף בית קטן
+    @app.get("/")
+    async def root():
+        return {"message": "Supplier Management System API", "version": "1.0.0", "status": "running"}
 
-# Include routers
-app.include_router(gateway_router, prefix="/api/v1")
+    # חיבור ראוטרים
+    app.include_router(users_router, prefix="/api/v1")
+    if HAS_GATEWAY:
+        app.include_router(gateway_router, prefix="/api/v1")
 
-@app.get("/")
-async def root():
-    return {
-        "message": "Supplier Management System API", 
-        "version": "1.0.0",
-        "status": "running"
-    }
+    return app
 
-@app.get("/health")
-async def health_check():
-    return {"status": "healthy", "database": "connected"}
+
+app = create_app()
 
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 
