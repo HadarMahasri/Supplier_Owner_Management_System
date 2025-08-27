@@ -1,24 +1,31 @@
 # backend/routers/users_router.py
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, EmailStr, constr
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, EmailStr, Field, StringConstraints
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Optional
+from typing import List, Optional, Annotated
 
-from main import get_db  # שימוש בדיפנדנסי של הסשן מה-main
+from database.session import get_db  # לא מ-main כדי למנוע circular import
 
 router = APIRouter(prefix="/users", tags=["users"])
 
+# ---------- Typed aliases (Pydantic v2-friendly) ----------
+Username = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=64)]
+Password = Annotated[str, StringConstraints(min_length=6, max_length=128)]
+Role = Annotated[str, StringConstraints(pattern=r"^(Supplier|StoreOwner)$")]
+ContactName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2)]
+Phone = Annotated[str, StringConstraints(strip_whitespace=True, min_length=6, max_length=32)]
+
 # ---------- Schemas ----------
 class RegisterPayload(BaseModel):
-    username: constr = Field(..., strip_whitespace=True, min_length=2, max_length=64)
+    username: Username
     email: Optional[EmailStr] = None
-    password: constr(min_length=6, max_length=128)
-    userType: constr(regex="^(Supplier|StoreOwner)$")
+    password: Password
+    userType: Role
 
     companyName: Optional[str] = None
-    contactName: constr(strip_whitespace=True, min_length=2)
-    phone: constr(strip_whitespace=True, min_length=6, max_length=32)
+    contactName: ContactName
+    phone: Phone
 
     # StoreOwner fields (optional for Supplier)
     city_id: Optional[int] = None
@@ -28,16 +35,16 @@ class RegisterPayload(BaseModel):
     closing_time: Optional[str] = None
 
     # Supplier only
-    serviceCities: Optional[List[int]] = []
+    serviceCities: Optional[List[int]] = None  # לא רשימה ברירת-מחדל (mutable)
 
 class RegisterResponse(BaseModel):
     ok: bool = True
     user_id: int
 
 class LoginPayload(BaseModel):
-    username: str
-    password: str
-    role: constr(regex="^(Supplier|StoreOwner)$")
+    username: Username
+    password: Password
+    role: Role
 
 class LoginResponse(BaseModel):
     ok: bool = True
@@ -99,15 +106,13 @@ def register_user(body: RegisterPayload, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="שגיאת שרת: לא הוחזר מזהה משתמש")
     user_id = row[0]
 
-    # ספקים: קישור לערים
-    if body.userType == "Supplier":
-        if body.serviceCities:
-            # הכנסת ערים בלי כפילויות
-            for cid in set(body.serviceCities or []):
-                db.execute(text("""
-                    IF NOT EXISTS (SELECT 1 FROM supplier_cities WHERE supplier_id=:sid AND city_id=:cid)
-                    INSERT INTO supplier_cities (supplier_id, city_id) VALUES (:sid, :cid)
-                """), {"sid": user_id, "cid": cid})
+    # ספקים: קישור לערים ללא כפילויות
+    if body.userType == "Supplier" and body.serviceCities:
+        for cid in set(body.serviceCities):
+            db.execute(text("""
+                IF NOT EXISTS (SELECT 1 FROM supplier_cities WHERE supplier_id=:sid AND city_id=:cid)
+                INSERT INTO supplier_cities (supplier_id, city_id) VALUES (:sid, :cid)
+            """), {"sid": user_id, "cid": cid})
 
     db.commit()
     return RegisterResponse(user_id=user_id)
