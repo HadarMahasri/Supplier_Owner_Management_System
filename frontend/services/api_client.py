@@ -44,3 +44,4 @@ def delete_product(product_id: int) -> None:
     r = requests.delete(_url(f"/api/v1/products/{product_id}"), timeout=10)
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
+
