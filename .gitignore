@@ -10,5 +10,3 @@ __pycache__/
 
 # Env files
 .env
-
-.venv/

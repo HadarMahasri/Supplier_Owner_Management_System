@@ -1,20 +1,25 @@
-# --- Web framework ---
+# === Frontend (PySide6) ===
+PySide6==6.6.0
+requests==2.31.0
+python-dotenv==1.0.0
+qtawesome==1.2.3
+
+# === Backend (FastAPI + Database) ===
 fastapi>=0.110,<0.115
 uvicorn[standard]>=0.27,<0.30
-
-# --- Data validation ---
 pydantic>=2.4,<3.0
 
-# --- Database (SQLAlchemy sync) ---
+# Database
 SQLAlchemy>=2.0,<2.1
-
-# --- SQL Server (ODBC) ---
 pyodbc>=5.0,<6.0
 
-# --- Env vars (.env) ---
+# === Shared ===
 python-dotenv>=1.0,<2.0
 
-# --- Optional: passwords hashing (בחרי אחד) ---
+# === Optional (for later features) ===
+# For password hashing
 # passlib[bcrypt]>=1.7,<2.0
-# bcrypt>=4.1,<5.0
-# argon2-cffi>=23.1,<24.0
+
+# For charts (if needed)
+# matplotlib>=3.7.0
+# plotly>=5.17.0

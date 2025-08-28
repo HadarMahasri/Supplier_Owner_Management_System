@@ -20,8 +20,8 @@ class MainWindow(QMainWindow):
 
         # ==== רקע (QLabel ברקע) ====
         self.background_label = QLabel(self)
-        self.background_label.setScaledContents(True)  # מאפשר שינוי גודל
-        self.background_label.lower()  # מעביר לשכבת רקע
+        self.background_label.setScaledContents(True)
+        self.background_label.lower()
 
         background_path = Path(__file__).parent.parent / "resources" / "background_blur.jpg"
         if background_path.exists():
@@ -36,7 +36,7 @@ class MainWindow(QMainWindow):
         central_layout.setContentsMargins(0, 0, 0, 0)
         central_layout.setSpacing(0)
 
-        # ==== אזור כותרת (עם לוגו וטקסט) ====
+        # ==== אזור כותרת ====
         header = QFrame(objectName="Header")
         header.setFixedHeight(96)
         hlayout = QHBoxLayout(header)
@@ -57,7 +57,7 @@ class MainWindow(QMainWindow):
         hlayout.addWidget(logo)
         hlayout.addStretch()
 
-        # ==== עמודים (Login/Signup וכו') ====
+        # ==== עמודים ====
         self.stack = QStackedWidget(objectName="ContentStack")
         self.page_login = LoginPage()
         self.page_signup = SignUpPage()
@@ -68,7 +68,7 @@ class MainWindow(QMainWindow):
         central_layout.addWidget(header)
         central_layout.addWidget(self.stack)
 
-        # ==== סגנון עיצוב כללי ====
+        # ==== סגנון עיצוב ====
         self.setStyleSheet("""
             QLabel#Title {
                 font-size: 32px;
@@ -87,7 +87,7 @@ class MainWindow(QMainWindow):
             }
         """)
 
-        # ==== אירועים בין עמודים ====
+        # ==== אירועים ====
         self.page_login.request_signup.connect(lambda: self.stack.setCurrentWidget(self.page_signup))
         self.page_login.login_success.connect(self._on_login_ok)
         self.page_signup.back_to_login.connect(lambda: self.stack.setCurrentWidget(self.page_login))
@@ -96,33 +96,41 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentWidget(self.page_login)
 
     def resizeEvent(self, event):
-        """ עדכון רקע בעת שינוי גודל החלון """
         if self.background_pixmap:
             scaled = self.background_pixmap.scaled(self.size(), Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
             self.background_label.setPixmap(scaled)
             self.background_label.resize(self.size())
         super().resizeEvent(event)
 
-    
     def _on_login_ok(self, user: dict):
         self.statusBar().showMessage(f"שלום {user.get('username')}", 5000)
+        
+        print(f"DEBUG - User data received: {user}")  # לדיבאג
+        
+        # תיקון הבעיה העיקרית: role במקום userType
+        if user.get("role") == "Supplier":  # ← תיקון כאן!
+            try:
+                supplier_page = SupplierHome(user)
+                supplier_page.logout_requested.connect(lambda: self._logout())
+                
+                self.stack.addWidget(supplier_page)
+                self.stack.setCurrentWidget(supplier_page)
+                
+                print("SUCCESS - Supplier page loaded successfully")
+                
+            except Exception as e:
+                print(f"ERROR loading supplier page: {e}")
+                self.statusBar().showMessage(f"שגיאה בטעינת עמוד ספק: {str(e)}", 10000)
 
-        # בדיקה אם המשתמש הוא ספק
-        if user.get("userType") == "Supplier":
-            supplier_page = SupplierHome(user)
-            # כשמבקשים התנתקות מהעמוד → חוזרים לעמוד ההתחברות
-            supplier_page.logout_requested.connect(lambda: self.stack.setCurrentWidget(self.page_login))
-            
-            self.stack.addWidget(supplier_page)
-            self.stack.setCurrentWidget(supplier_page)
-
-        # אם זה בעל חנות (בינתיים אפשר להשאיר כ-not implemented)
-        elif user.get("userType") == "StoreOwner":
+        elif user.get("role") == "StoreOwner":  # ← גם כאן תיקון
             self.statusBar().showMessage("עמוד בעל חנות עדיין לא ממומש", 5000)
-            # בעתיד כאן נטען StoreOwnerHome
-
 
     def _on_signup_ok(self, username: str, password: str):
         self.page_login.prefill(username, password)
         self.stack.setCurrentWidget(self.page_login)
         self.statusBar().showMessage("נרשמת בהצלחה!", 5000)
+        
+    def _logout(self):
+        """פונקציה להתנתקות - חוזרת לעמוד ההתחברות"""
+        self.stack.setCurrentWidget(self.page_login)
+        self.statusBar().showMessage("התנתקת בהצלחה", 3000)
