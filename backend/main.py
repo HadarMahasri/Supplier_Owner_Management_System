@@ -3,12 +3,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+
 # חשוב: המודול שמרכז את ההתחברות למסד (engine + get_db)
 # ראו database/session.py כפי שהצעתי קודם (odbc_connect ל-SQL Server בענן)
 from database.session import engine  # אם תרצה גם get_db לתלויות: from database.session import get_db
 
 # ראוטרים (users חובה; אחרים אופציונליים)
 from routers.users_router import router as users_router
+from routers.products_router import router as products_router
+
 
 # אופציונלי: אם יש לך router נוסף (gateway), ננסה לייבא, ואם לא — מתעלמים
 try:
@@ -67,8 +70,11 @@ def create_app() -> FastAPI:
 
     # חיבור ראוטרים
     app.include_router(users_router, prefix="/api/v1")
+    app.include_router(products_router, prefix="/api/v1")
+
     if HAS_GATEWAY:
         app.include_router(gateway_router, prefix="/api/v1")
+
 
     return app
 
