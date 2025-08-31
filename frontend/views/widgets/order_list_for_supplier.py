@@ -1,8 +1,8 @@
-# frontend/views/widgets/orders_for_supplier.py
+# frontend/views/widgets/order_list_for_supplier.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea,
-    QCheckBox, QDateEdit, QMessageBox, QSpacerItem, QSizePolicy
+    QCheckBox, QDateEdit, QMessageBox, QSpacerItem, QSizePolicy, QFileDialog
 )
 from PySide6.QtCore import Qt, Signal, QDate, QThread
 from PySide6.QtGui import QFont
@@ -11,6 +11,8 @@ import os
 from typing import List, Dict, Set
 from datetime import datetime, date
 import json
+import pandas as pd
+
 
 
 class OrdersFetchThread(QThread):
@@ -39,67 +41,10 @@ class OrdersFetchThread(QThread):
             )
             if response.status_code == 200:
                 return response.json()
-            return self._get_demo_orders()
+            return []
         except Exception:
-            return self._get_demo_orders()
+            return []
     
-    def _get_demo_orders(self) -> List[Dict]:
-        """נתוני הזמנות דמו"""
-        return [
-            {
-                "id": 8,
-                "status": "בוצעה",
-                "created_date": "2025-08-25T10:30:00",
-                "owner_company": "חנויות מקורי בע\"מ",
-                "owner_name": "יוסי כהן",
-                "owner_phone": "03-1234567",
-                "total_amount": 25524.00,
-                "items": [
-                    {"product_id": 1, "product_name": "מגש כיבוד גדול", "quantity": 3, "unit_price": 120.00},
-                    {"product_id": 2, "product_name": "קינוח פירות", "quantity": 5, "unit_price": 45.50}
-                ]
-            },
-            {
-                "id": 7,
-                "status": "בתהליך",
-                "created_date": "2025-08-25T09:15:00",
-                "owner_company": "חנויות מקורי בע\"מ",
-                "owner_name": "משה לוי",
-                "owner_phone": "03-9876543",
-                "total_amount": 960.00,
-                "items": [
-                    {"product_id": 3, "product_name": "מגש סושי מעורב", "quantity": 2, "unit_price": 180.00}
-                ]
-            },
-            {
-                "id": 6,
-                "status": "בוצעה",
-                "created_date": "2025-08-24T14:20:00",
-                "owner_company": "חנויות מקורי בע\"מ",
-                "owner_name": "דנה אברהם",
-                "owner_phone": "04-5555555",
-                "total_amount": 5280.00,
-                "items": [
-                    {"product_id": 4, "product_name": "מחשב נייד Dell", "quantity": 1, "unit_price": 3500.00},
-                    {"product_id": 5, "product_name": "עכבר אלחוטי", "quantity": 10, "unit_price": 85.00}
-                ]
-            },
-            {
-                "id": 5,
-                "status": "הושלמה",
-                "created_date": "2025-08-20T11:00:00",
-                "owner_company": "חנויות מקורי בע\"מ",
-                "owner_name": "רונית מנדלבאום",
-                "owner_phone": "09-8888888",
-                "total_amount": 11700.00,
-                "items": [
-                    {"product_id": 6, "product_name": "כיסא משרדי ארגונומי", "quantity": 2, "unit_price": 850.00},
-                    {"product_id": 7, "product_name": "שולחן עבודה", "quantity": 1, "unit_price": 1200.00}
-                ]
-            }
-        ]
-
-
 class OrdersForSupplier(QWidget):
     """רכיב רשימת הזמנות לספק"""
     
@@ -137,21 +82,24 @@ class OrdersForSupplier(QWidget):
         header_row = self.create_header_row()
         main_layout.addWidget(header_row)
         
-        # אזור הזמנות עם גלילה
+        # אזור ההזמנות עם גלילה
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
         scroll_area.setFrameShape(QFrame.NoFrame)
         
+        # הגדרות חשובות עבור ה-container
         self.orders_container = QWidget()
+        self.orders_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)  # שינוי חשוב!
+        
         self.orders_layout = QVBoxLayout(self.orders_container)
         self.orders_layout.setContentsMargins(0, 0, 0, 0)
         self.orders_layout.setSpacing(2)
         
         scroll_area.setWidget(self.orders_container)
         main_layout.addWidget(scroll_area, 1)  # stretch
-    
+
     def create_filter_bar(self) -> QWidget:
         """יצירת פס הפילטרים"""
         filter_frame = QFrame()
@@ -245,153 +193,229 @@ class OrdersForSupplier(QWidget):
         return header
     
     def setup_styles(self):
-        """החלת סגנונות"""
         self.setStyleSheet("""
-            QLabel#ordersTitle {
-                font-size: 24px;
-                font-weight: 700;
-                color: #111827;
-                margin-bottom: 8px;
-            }
-            
-            QFrame#filterBar {
-                background: #f8fafc;
-                border: 1px solid #e5e7eb;
-                border-radius: 8px;
-            }
-            
-            QLabel#filterLabel {
-                font-weight: 600;
-                color: #374151;
-            }
-            
-            QDateEdit#dateInput {
-                padding: 6px 10px;
-                border: 1px solid #d1d5db;
-                border-radius: 6px;
-                background: white;
-                min-width: 120px;
-            }
-            
-            QPushButton#clearFilterBtn {
-                background: #f3f4f6;
-                color: #374151;
-                border: 1px solid #d1d5db;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: 500;
-            }
-            QPushButton#clearFilterBtn:hover {
-                background: #e5e7eb;
-            }
-            
-            QPushButton#exportBtn {
-                background: #10b981;
-                color: white;
-                border: 1px solid #059669;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-weight: 600;
-            }
-            QPushButton#exportBtn:hover {
-                background: #059669;
-            }
-            
-            QPushButton#historyBtn {
-                background: #6366f1;
-                color: white;
-                border: 1px solid #4f46e5;
-                border-radius: 8px;
-                padding: 8px 16px;
-                font-weight: 600;
-            }
-            QPushButton#historyBtn:hover {
-                background: #4f46e5;
-            }
-            
-            QFrame#headerRow {
-                background: #f1f5f9;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px 8px 0px 0px;
-            }
-            
-            QLabel#headerLabel {
-                font-weight: 700;
-                color: #475569;
-                padding: 4px;
-            }
-            
-            QFrame#orderRow {
-                background: white;
-                border: 1px solid #e5e7eb;
-                border-top: none;
-            }
-            QFrame#orderRow:hover {
-                background: #f9fafb;
-            }
-            
-            QLabel#orderCell {
-                padding: 12px 8px;
-                color: #374151;
-            }
-            
-            QPushButton#statusBtnActive {
-                background: #10b981;
-                color: white;
-                border: 1px solid #059669;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: 600;
-                font-size: 12px;
-            }
-            
-            QPushButton#statusBtnPending {
-                background: #f59e0b;
-                color: white;
-                border: 1px solid #d97706;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: 600;
-                font-size: 12px;
-            }
-            
-            QPushButton#statusBtnCompleted {
-                background: #6b7280;
-                color: white;
-                border: 1px solid #4b5563;
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-weight: 600;
-                font-size: 12px;
-            }
-            
-            QPushButton#expandBtn {
-                background: transparent;
-                border: none;
-                font-size: 16px;
-                padding: 4px;
-            }
-            QPushButton#expandBtn:hover {
-                background: #f3f4f6;
-                border-radius: 4px;
-            }
-            
-            QFrame#orderDetails {
-                background: #f8fafc;
-                border: 1px solid #e5e7eb;
-                border-top: none;
-                padding: 16px;
-            }
-            
-            QLabel#detailLabel {
-                font-weight: 600;
-                color: #374151;
-            }
-            
-            QLabel#detailValue {
-                color: #6b7280;
-            }
-        """)
+        QLabel#ordersTitle {
+            font-size: 24px;
+            font-weight: 700;
+            color: #065f46;
+            margin-bottom: 8px;
+            padding: 12px;
+            background: #ecfdf5;
+            border-radius: 8px;
+        }
+        
+        QFrame#filterBar {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-radius: 12px;
+            margin-bottom: 8px;
+        }
+        
+        QLabel#filterLabel {
+            font-weight: 600;
+            color: #065f46;
+        }
+        
+        QDateEdit#dateInput {
+            padding: 8px 12px;
+            border: 1px solid #bbf7d0;
+            border-radius: 8px;
+            background: white;
+            min-width: 130px;
+            font-size: 14px;
+        }
+        QDateEdit#dateInput:focus {
+            border: 2px solid #10b981;
+        }
+        
+        QPushButton#clearFilterBtn {
+            background: #f9fafb;
+            color: #374151;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-weight: 500;
+        }
+        QPushButton#clearFilterBtn:hover {
+            background: #f3f4f6;
+            border-color: #10b981;
+        }
+        
+        QPushButton#exportBtn {
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        QPushButton#exportBtn:hover {
+            background: #059669;
+        }
+        
+        QPushButton#historyBtn {
+            background: #6366f1;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            padding: 10px 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        QPushButton#historyBtn:hover {
+            background: #4f46e5;
+        }
+        
+        /* כותרות הטבלה */
+        QFrame#headerRow {
+            background: #d1fae5;
+            border: 1px solid #a7f3d0;
+            border-radius: 12px 12px 0px 0px;
+            margin-bottom: 0px;
+        }
+        
+        QLabel#headerLabel {
+            font-weight: 700;
+            color: #065f46;
+            padding: 12px 8px;
+            font-size: 14px;
+        }
+        
+        /* שורות ההזמנות */
+        QFrame#orderRow {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            border-top: none;
+            margin: 0px;
+        }
+        QFrame#orderRow:hover {
+            background: #ecfdf5;
+        }
+        
+        QLabel#orderCell {
+            padding: 14px 8px;
+            color: #065f46;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        /* כפתורי סטטוס */
+        QPushButton#statusBtnPending {
+            background: #f59e0b;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        QPushButton#statusBtnPending:hover {
+            background: #d97706;
+        }
+        
+        QPushButton#statusBtnActive {
+            background: #10b981;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        QPushButton#statusBtnActive:hover {
+            background: #059669;
+        }
+        
+        QPushButton#statusBtnCompleted {
+            background: #6b7280;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 12px;
+        }
+        
+        /* כפתור הרחבה */
+        QPushButton#expandBtn {
+            background: transparent;
+            border: 1px solid #bbf7d0;
+            border-radius: 6px;
+            font-size: 14px;
+            padding: 6px;
+            color: #059669;
+        }
+        QPushButton#expandBtn:hover {
+            background: #ecfdf5;
+            border-color: #059669;
+        }
+        
+        /* פרטים מורחבים */
+        QFrame#orderDetails {
+            background: #f8fafc;
+            border: 1px solid #bbf7d0;
+            border-top: 1px solid #a7f3d0;
+            padding: 20px;
+            margin: 0px;
+        }
+        
+        QLabel#detailLabel {
+            font-weight: 700;
+            color: #065f46;
+            font-size: 14px;
+            margin-bottom: 4px;
+        }
+        
+        QLabel#detailValue {
+            color: #374151;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+        
+        /* טבלת מוצרים בפרטים */
+        QTableWidget {
+            background: white;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            gridline-color: #e5e7eb;
+            font-size: 13px;
+        }
+        
+        QTableWidget::item {
+            padding: 8px;
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        QTableWidget::item:selected {
+            background: #ecfdf5;
+            color: #065f46;
+        }
+        
+        QHeaderView::section {
+            background: #f9fafb;
+            color: #374151;
+            padding: 10px;
+            border: 1px solid #e5e7eb;
+            font-weight: 600;
+        }
+        
+        /* Scroll area */
+        QScrollArea {
+            background: transparent;
+            border: none;
+        }
+        
+        /* Container כללי */
+        QFrame#orderContainer {
+            margin-bottom: 0px;
+        }
+        
+        /* הודעה כשאין הזמנות */
+        QLabel {
+            color: #6b7280;
+        }
+    """)
     
     def load_orders(self):
         """טעינת הזמנות"""
@@ -412,9 +436,7 @@ class OrdersForSupplier(QWidget):
     def _on_error(self, error: str):
         """טיפול בשגיאות"""
         QMessageBox.warning(self, "שגיאה", error)
-        # עדיין נציג נתוני דמו
-        demo_orders = OrdersFetchThread(self.base_url, 0)._get_demo_orders()
-        self._on_orders_loaded(demo_orders)
+        
     
     def _update_orders_display(self, orders_list: List[Dict] = None):
         """עדכון תצוגת ההזמנות"""
@@ -441,8 +463,14 @@ class OrdersForSupplier(QWidget):
                 order_widget = self._create_order_widget(order)
                 self.orders_layout.addWidget(order_widget)
         
-        # הוסף spacer בסוף
-        self.orders_layout.addStretch()
+        # הוסף spacer קטן רק אם יש הזמנות
+        if orders_list:
+            spacer = QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding)
+            self.orders_layout.addItem(spacer)
+        else:
+            # אם אין הזמנות, הוסף stretch כדי למרכז את ההודעה
+            self.orders_layout.addStretch()
+
     
     def _create_order_widget(self, order: Dict) -> QWidget:
         """יצירת widget של הזמנה"""
@@ -543,58 +571,87 @@ class OrdersForSupplier(QWidget):
         return row
     
     def _create_status_button(self, order: Dict) -> QPushButton:
-        """יצירת כפתור סטטוס"""
+        """יצירת כפתור סטטוס/פעולה"""
         status = order.get("status", "בתהליך")
+        order_id = order.get("id", 0)
         
         if status == "בוצעה":
             btn = QPushButton("לאישור קבלת הזמנה")
             btn.setObjectName("statusBtnPending")
+            btn.clicked.connect(lambda: self._update_order_status(order_id, "בתהליך"))
         elif status == "בתהליך":
             btn = QPushButton("ההזמנה אושרה")
             btn.setObjectName("statusBtnActive")
-            btn.setEnabled(False)
+            btn.clicked.connect(lambda: self._update_order_status(order_id, "הושלמה"))
         else:  # "הושלמה"
             btn = QPushButton("ההזמנה הושלמה")
             btn.setObjectName("statusBtnCompleted")
             btn.setEnabled(False)
         
-        if btn.isEnabled():
-            btn.clicked.connect(lambda: self._handle_status_change(order))
-        
         return btn
     
     def _create_action_button(self, order: Dict) -> QPushButton:
-        """יצירת כפתור פעולה (כרגע ריק)"""
+        """כפתור פעולה נוסף (כרגע ריק)"""
         btn = QPushButton("")
         btn.setVisible(False)  # מוסתר כרגע
         return btn
     
     def _create_order_details(self, order: Dict) -> QWidget:
-        """יצירת פרטים מורחבים של הזמנה"""
         details = QFrame()
         details.setObjectName("orderDetails")
         
         layout = QVBoxLayout(details)
-        layout.setContentsMargins(20, 16, 20, 16)
-        layout.setSpacing(12)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
         
-        # פרטי החנות
-        store_info_layout = QHBoxLayout()
-        store_info_layout.setSpacing(20)
+        # פרטי החנות ואיש קשר
+        info_layout = QVBoxLayout()
+        info_layout.setSpacing(8)
         
         store_name = order.get("owner_company", "")
         contact_name = order.get("owner_name", "")
         phone = order.get("owner_phone", "")
+        created_date = order.get("created_date", "")
         
         if store_name:
-            store_info_layout.addWidget(QLabel(f"שם החנות: {store_name}"))
-        if contact_name:
-            store_info_layout.addWidget(QLabel(f"איש קשר: {contact_name}"))
-        if phone:
-            store_info_layout.addWidget(QLabel(f"טלפון: {phone}"))
+            store_label = QLabel("שם החנות:")
+            store_label.setObjectName("detailLabel")
+            store_value = QLabel(store_name)
+            store_value.setObjectName("detailValue")
+            info_layout.addWidget(store_label)
+            info_layout.addWidget(store_value)
         
-        store_info_layout.addStretch()
-        layout.addLayout(store_info_layout)
+        if contact_name:
+            contact_label = QLabel("איש קשר:")
+            contact_label.setObjectName("detailLabel")
+            contact_value = QLabel(contact_name)
+            contact_value.setObjectName("detailValue")
+            info_layout.addWidget(contact_label)
+            info_layout.addWidget(contact_value)
+        
+        if phone:
+            phone_label = QLabel("טלפון:")
+            phone_label.setObjectName("detailLabel")
+            phone_value = QLabel(phone)
+            phone_value.setObjectName("detailValue")
+            info_layout.addWidget(phone_label)
+            info_layout.addWidget(phone_value)
+        
+        # שעות פתיחה אם יש
+        if created_date:
+            try:
+                dt = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+                time_str = dt.strftime("%H:%M")
+                hours_label = QLabel("שעת הזמנה:")
+                hours_label.setObjectName("detailLabel")
+                hours_value = QLabel(f"{time_str}")
+                hours_value.setObjectName("detailValue")
+                info_layout.addWidget(hours_label)
+                info_layout.addWidget(hours_value)
+            except:
+                pass
+        
+        layout.addLayout(info_layout)
         
         # טבלת מוצרים
         items = order.get("items", [])
@@ -614,7 +671,7 @@ class OrdersForSupplier(QWidget):
                 table.setItem(row, 2, QTableWidgetItem(str(item.get("quantity", 0))))
             
             table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-            table.setMaximumHeight(150)
+            table.setMaximumHeight(300)
             table.setAlternatingRowColors(True)
             
             layout.addWidget(table)
@@ -630,25 +687,65 @@ class OrdersForSupplier(QWidget):
         
         self._update_orders_display()
     
-    def _handle_status_change(self, order: Dict):
-        """טיפול בשינוי סטטוס הזמנה"""
-        order_id = order.get("id", 0)
+    def _update_order_status(self, order_id: int, new_status: str):
+        """עדכון סטטוס הזמנה בשרת"""
+        
+        # הודעת אישור למשתמש
+        if new_status == "בתהליך":
+            message = f"האם לאשר קבלת הזמנה #{order_id}?"
+            success_msg = f"הזמנה #{order_id} אושרה בהצלחה!"
+        elif new_status == "הושלמה":
+            message = f"האם לסמן הזמנה #{order_id} כהושלמה?"
+            success_msg = f"הזמנה #{order_id} סומנה כהושלמה!"
+        else:
+            return
+        
         reply = QMessageBox.question(
-            self, "אישור הזמנה",
-            f"האם לאשר קבלת הזמנה #{order_id}?",
+            self, "אישור שינוי סטטוס",
+            message,
             QMessageBox.Yes | QMessageBox.No
         )
         
-        if reply == QMessageBox.Yes:
-            # עדכון הסטטוס
-            for i, o in enumerate(self.orders):
-                if o.get("id") == order_id:
-                    self.orders[i]["status"] = "בתהליך"
-                    break
+        if reply != QMessageBox.Yes:
+            return
+        
+        try:
+            # שליחת בקשה לשרת
+            response = requests.put(
+                f"{self.base_url}/api/v1/orders/{order_id}/status",
+                json={"status": new_status},
+                params={"supplier_id": self.supplier_id},
+                timeout=10
+            )
             
-            self._update_orders_display()
-            QMessageBox.information(self, "הזמנה אושרה", f"הזמנה #{order_id} אושרה בהצלחה!")
-    
+            if response.status_code == 200:
+                # עדכון מקומי של הסטטוס
+                for i, order in enumerate(self.orders):
+                    if order.get("id") == order_id:
+                        self.orders[i]["status"] = new_status
+                        break
+                
+                # רענון התצוגה
+                self._update_orders_display()
+                QMessageBox.information(self, "עדכון הצליח", success_msg)
+                
+            else:
+                error_msg = "שגיאה בעדכון הסטטוס"
+                try:
+                    error_detail = response.json().get("detail", "")
+                    if error_detail:
+                        error_msg += f": {error_detail}"
+                except:
+                    pass
+                QMessageBox.warning(self, "שגיאה", error_msg)
+                
+        except requests.exceptions.Timeout:
+            QMessageBox.warning(self, "שגיאה", "הבקשה נכשלה - זמן המתנה יתר על המידה")
+        except requests.exceptions.ConnectionError:
+            QMessageBox.warning(self, "שגיאה", "לא ניתן להתחבר לשרת")
+        except Exception as e:
+            QMessageBox.warning(self, "שגיאה", f"שגיאה בעדכון הסטטוס: {str(e)}")
+
     def _get_filtered_orders(self) -> List[Dict]:
         """קבלת הזמנות מסוננות"""
         filtered = []
@@ -706,72 +803,101 @@ class OrdersForSupplier(QWidget):
         self._update_orders_display()
     
     def export_to_excel(self):
-        """יצוא לאקסל"""
+        """יצוא להזמנות לקובץ Excel (או CSV)"""
         filtered_orders = self._get_filtered_orders()
-        
+
         if not filtered_orders:
             QMessageBox.information(self, "יצוא לאקסל", "אין הזמנות לייצא")
             return
-        
+
         try:
-            # יצירת נתוני ההזמנות
+            # הכנת נתונים לשתי טבלאות: הזמנות ומוצרים
             orders_data = []
             products_data = []
-            
+
             for order in filtered_orders:
+                # טיפול בתאריך
+                try:
+                    date_str = datetime.fromisoformat(
+                        order.get('created_date', '').replace('Z', '+00:00')
+                    ).strftime('%d/%m/%Y') if order.get('created_date') else ''
+                except Exception:
+                    date_str = order.get('created_date', '')[:10]
+
                 # נתוני הזמנה בסיסיים
                 order_info = {
                     'מספר הזמנה': order.get('id', ''),
-                    'תאריך': datetime.fromisoformat(order.get('created_date', '').replace('Z', '+00:00')).strftime('%d/%m/%Y') if order.get('created_date') else '',
+                    'תאריך': date_str,
                     'סכום ההזמנה': order.get('total_amount', 0),
                     'סטטוס': order.get('status', ''),
                     'שם החנות': order.get('owner_company', ''),
                     'איש קשר': order.get('owner_name', ''),
-                    'טלפון': order.get('owner_phone', ''),
-                    'מספר מוצרים': len(order.get('items', []))
+                    'מספר מוצרים': len(order.get('items', [])),
                 }
                 orders_data.append(order_info)
-                
+
                 # פירוט מוצרים
                 for item in order.get('items', []):
-                    product_info = {
+                    products_data.append({
                         'מספר הזמנה': order.get('id', ''),
-                        'תאריך הזמנה': datetime.fromisoformat(order.get('created_date', '').replace('Z', '+00:00')).strftime('%d/%m/%Y') if order.get('created_date') else '',
+                        'תאריך הזמנה': date_str,
                         'שם החנות': order.get('owner_company', ''),
                         'מספר מוצר': item.get('product_id', ''),
                         'שם מוצר': item.get('product_name', ''),
                         'כמות': item.get('quantity', 0),
                         'מחיר יחידה': item.get('unit_price', 0),
-                        'סכום מוצר': item.get('quantity', 0) * item.get('unit_price', 0)
-                    }
-                    products_data.append(product_info)
-            
-            # שמירה כ-CSV בפשטות (במקום Excel)
+                        'סכום מוצר': (item.get('quantity', 0) or 0) * (item.get('unit_price', 0) or 0),
+                    })
+
+            # שם קובץ מוצע
             from datetime import date
-            today = date.today()
-            date_str = today.strftime('%Y-%m-%d')
-            
-            file_name = f"הזמנות_ספק_{date_str}"
-            if self.display_history:
-                file_name += "_היסטוריה"
+            suggested = f"הזמנות_ספק_{self.supplier_id or ''}_{date.today():%Y-%m-%d}_{'היסטוריה' if self.display_history else 'פעילות'}.xlsx"
+
+            # חלון בחירת קובץ
+            path, _ = QFileDialog.getSaveFileName(
+                self,
+                "שמירת דוח הזמנות",
+                suggested,
+                "Excel (*.xlsx);;CSV (*.csv)"
+            )
+            if not path:
+                return
+
+            import pandas as pd
+
+            df_orders = pd.DataFrame(orders_data)
+            df_products = pd.DataFrame(products_data)
+
+            if path.lower().endswith(".csv"):
+                # אם בחרו CSV – שומרים שני קבצים נפרדים
+                base = path[:-4]
+                orders_csv = base + "_הזמנות.csv"
+                products_csv = base + "_מוצרים.csv"
+                df_orders.to_csv(orders_csv, index=False, encoding="utf-8-sig")
+                df_products.to_csv(products_csv, index=False, encoding="utf-8-sig")
+
+                QMessageBox.information(
+                    self, "יצוא הושלם",
+                    f"נשמרו שני קבצי CSV:\n• {orders_csv}\n• {products_csv}"
+                )
             else:
-                file_name += "_פעילות"
-            
-            # הודעה למשתמש
-            summary = f"""יצוא הושלם בהצלחה!
+                # קובץ Excel עם שני גיליונות
+                with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+                    df_orders.to_excel(writer, sheet_name="הזמנות", index=False)
+                    df_products.to_excel(writer, sheet_name="מוצרים", index=False)
 
-📊 סיכום היצוא:
-• {len(orders_data)} הזמנות
-• {len(products_data)} מוצרים
-• תקופה: {"היסטוריה" if self.display_history else "פעילות נוכחית"}
+                    # התאמת רוחב עמודות בסיסי
+                    for sheet_name, df in [("הזמנות", df_orders), ("מוצרים", df_products)]:
+                        ws = writer.sheets[sheet_name]
+                        for col_idx, col in enumerate(df.columns):
+                            ws.set_column(col_idx, col_idx, max(12, min(50, len(str(col)) + 6)))
 
-הקובץ נשמר כ: {file_name}.csv"""
-            
-            QMessageBox.information(self, "יצוא הושלם", summary)
-            
+                QMessageBox.information(self, "יצוא הושלם", f"הקובץ נשמר בהצלחה:\n{path}")
+
         except Exception as e:
             QMessageBox.critical(self, "שגיאת יצוא", f"שגיאה בייצוא הקובץ:\n{str(e)}")
-    
+
+
     def refresh_orders(self):
         """רענון רשימת הזמנות"""
         self.load_orders()
