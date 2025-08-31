@@ -4,12 +4,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from contextlib import asynccontextmanager
 import models
-
 # חשוב: המודול שמרכז את ההתחברות למסד (engine + get_db)
 from database.session import engine
-
 # ראוטרים (users חובה; אחרים אופציונליים)
 from routers.users_router import router as users_router
+from routers.owner_links_router import router as owner_links_router
 
 # ראוטרים נוספים
 import traceback
@@ -110,15 +109,22 @@ def create_app() -> FastAPI:
 
     # חיבור ראוטרים
     app.include_router(users_router, prefix="/api/v1")
+
+    app.include_router(owner_links_router, prefix="/api/v1")
     
     if HAS_PRODUCTS:
         app.include_router(products_router, prefix="/api/v1")
+    
     
     if HAS_ORDERS:
         app.include_router(orders_router, prefix="/api/v1")
     
     if HAS_GATEWAY:
         app.include_router(gateway_router, prefix="/api/v1")
+
+   
+         
+
 
 
     return app
