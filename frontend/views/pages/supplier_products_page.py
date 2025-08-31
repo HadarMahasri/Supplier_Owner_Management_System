@@ -545,32 +545,42 @@ class SupplierProductsPage(QWidget):
             QMessageBox.critical(self, "שגיאה", f"יצירת מוצר נכשלה: {e}")
 
     def _handle_edit_product(self, pid: int, payload: dict):
-        """טיפול בעריכת מוצר - תיקון 2"""
         try:
-            # שולח רק את השדות שצריך לעדכן, כולל המלאי הנוכחי
             p = next((x for x in self._all_products if x.id == pid), None)
             if not p:
                 return
-                
-            # בניית payload מלא עם המלאי הנוכחי אם לא צוין אחרת
+
             full_payload = {
+                "supplier_id": p.supplier_id,                # <<< חשוב לשלוח גם ב-PUT
                 "name": payload.get("name", p.name),
                 "price": payload.get("price", p.price),
                 "min_qty": payload.get("min_qty", p.min_qty),
-                "stock": payload.get("stock", p.stock),  # שמירה על המלאי הקיים
-                "image_url": payload.get("image_url", p.image_url)
+                "stock": payload.get("stock", p.stock),       # משמר את המלאי הקיים
+                "image_url": payload.get("image_url", p.image_url),
             }
-            
+
             updated = api_client.update_product(pid, full_payload)
             p.name = updated["name"]
             p.price = float(updated["price"])
             p.min_qty = int(updated["min_qty"])
-            p.stock = int(updated.get("stock", p.stock))  # תיקון 2: שמירה על מלאי
+
+            # כאן מכניסים את הלוגיקה המיוחדת למלאי:
+            sent_stock = full_payload["stock"]
+            returned_stock = updated.get("stock")
+
+            if returned_stock is None:
+                pass  # לא חזר שדה – נשאר הערך הקיים
+            elif int(returned_stock) == 0 and int(sent_stock) > 0:
+                pass  # השרת החזיר 0 למרות ששלחנו ערך – נשמור על הערך הקיים
+            else:
+                p.stock = int(returned_stock)
+
             p.image_url = updated.get("image_url")
             self._render_products(self._all_products)
             self._back_to_products_list()
         except Exception as e:
             QMessageBox.critical(self, "שגיאה", f"עדכון מוצר נכשל: {e}")
+
 
     def _handle_stock_update(self, pid: int, new_stock: int):
         """טיפול בעדכון מלאי"""

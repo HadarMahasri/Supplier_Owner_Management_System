@@ -3,7 +3,7 @@ import os
 from urllib.parse import quote_plus
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base  # ⬅️ הוספנו
 
 load_dotenv()
 
@@ -15,11 +15,9 @@ if not DATABASE_URL:
     DB_USER = os.getenv("DB_USER", "").strip()
     DB_PASSWORD = os.getenv("DB_PASSWORD", "").strip()
     DB_PORT = os.getenv("DB_PORT", "1433").strip()
-
     if not all([DB_HOST, DB_NAME, DB_USER, DB_PASSWORD]):
         raise RuntimeError("Missing DB env vars (DB_HOST/DB_NAME/DB_USER/DB_PASSWORD). No SQLite fallback.")
 
-    # בחרי 18 אם מותקן אצלך; אחרת החליפי ל-17 בשורה הבאה
     odbc_str = (
         "DRIVER=ODBC Driver 17 for SQL Server;"
         f"SERVER={DB_HOST},{DB_PORT};"
@@ -35,8 +33,12 @@ if not DATABASE_URL:
 engine = create_engine(
     DATABASE_URL,
     pool_pre_ping=True,
+    pool_recycle=300,
     future=True,
 )
+
+# ⬅️ זה ה-Bas e שהמודלים (Product וכו') צריכים
+Base = declarative_base()
 
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False, future=True)
 

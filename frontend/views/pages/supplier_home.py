@@ -6,6 +6,10 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 import os
 from typing import Dict
+import json, datetime
+from PySide6.QtWidgets import QFileDialog
+import pandas as pd
+
 
 # Import the orders component and products page
 from views.widgets.order_list_for_supplier import OrdersForSupplier
@@ -142,6 +146,11 @@ class SupplierHome(QWidget):
         products_btn = QPushButton("ניהול מוצרים")
         products_btn.setObjectName("primaryBtn")
         products_btn.clicked.connect(self.show_products_page)
+
+        export_btn = QPushButton("ייצוא לאקסל")
+        export_btn.setObjectName("secondaryBtn")
+        export_btn.clicked.connect(self.export_orders_to_excel)
+        actions_layout.addWidget(export_btn)
         
         # התנתק button
         logout_btn = QPushButton("התנתק")
@@ -158,6 +167,79 @@ class SupplierHome(QWidget):
         layout.addLayout(actions_layout)
         
         return topbar
+    
+    def export_orders_to_excel(self):
+        try:
+            from services import api_client
+            supplier_id = self.user_data.get('id')
+            if not supplier_id:
+                QMessageBox.warning(self, "ייצוא לאקסל", "חסר מזהה ספק.")
+                return
+
+            # שליפת הזמנות מה־API
+            orders = api_client.get_orders_for_supplier(supplier_id)
+
+            # בחירת קובץ יעד
+            suggested = f"orders_supplier_{supplier_id}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+            path, _ = QFileDialog.getSaveFileName(self, "שמירת דוח הזמנות", suggested, "Excel (*.xlsx);;CSV (*.csv)")
+            if not path:
+                return
+
+            # ניסיון כתיבה ל־XLSX בעזרת pandas; נפילה ל־CSV אם pandas לא קיים
+            try:
+
+                # הפחתה ל־DataFrame בצורה גנרית:
+                rows = []
+                for o in (orders or []):
+                    row = {}
+                    if isinstance(o, dict):
+                        for k, v in o.items():
+                            if isinstance(v, (dict, list)):
+                                # שדות מורכבים – נשמר כמחרוזת JSON כדי שלא נאבד מידע
+                                row[k] = json.dumps(v, ensure_ascii=False)
+                            else:
+                                row[k] = v
+                    else:
+                        row["value"] = str(o)
+                    rows.append(row)
+
+                df = pd.DataFrame(rows)
+                if path.lower().endswith(".csv"):
+                    df.to_csv(path, index=False, encoding="utf-8-sig")
+                else:
+                    # יצוא לאקסל
+                    with pd.ExcelWriter(path, engine="xlsxwriter") as writer:
+                        df.to_excel(writer, sheet_name="Orders", index=False)
+                QMessageBox.information(self, "ייצוא לאקסל", "הדוח נשמר בהצלחה.")
+            except ImportError:
+                # ללא pandas – נשמור CSV פשוט
+                if not path.lower().endswith(".csv"):
+                    path = path.rsplit(".", 1)[0] + ".csv"
+                import csv
+                # איסוף כל המפתחות מכל הרשומות
+                keys = set()
+                for o in (orders or []):
+                    if isinstance(o, dict):
+                        keys.update(o.keys())
+                keys = list(keys) if keys else ["value"]
+
+                with open(path, "w", newline="", encoding="utf-8-sig") as f:
+                    w = csv.DictWriter(f, fieldnames=keys)
+                    w.writeheader()
+                    for o in (orders or []):
+                        if isinstance(o, dict):
+                            row = {}
+                            for k in keys:
+                                v = o.get(k)
+                                row[k] = json.dumps(v, ensure_ascii=False) if isinstance(v, (dict, list)) else v
+                            w.writerow(row)
+                        else:
+                            w.writerow({"value": str(o)})
+
+                QMessageBox.information(self, "ייצוא ל-CSV", "הדוח נשמר כ-CSV (pandas לא מותקן).")
+
+        except Exception as e:
+            QMessageBox.critical(self, "שגיאה ביצוא", f"שגיאה: {e}")
     
     def setup_styles(self):
         """סגנונות מעודכנים"""

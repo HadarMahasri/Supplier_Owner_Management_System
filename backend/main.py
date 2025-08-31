@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from contextlib import asynccontextmanager
+import models
 
 # חשוב: המודול שמרכז את ההתחברות למסד (engine + get_db)
 from database.session import engine
@@ -11,13 +12,14 @@ from database.session import engine
 from routers.users_router import router as users_router
 
 # ראוטרים נוספים
+import traceback
 try:
     from routers.products_router import router as products_router
     HAS_PRODUCTS = True
-except Exception:
+except Exception as e:
     HAS_PRODUCTS = False
-    print("⚠️ Products router not found - continuing without it")
-
+    print("⚠️ Products router failed to load:", e)
+    traceback.print_exc()
 try:
     from routers.orders_router import router as orders_router
     HAS_ORDERS = True

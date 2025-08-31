@@ -22,6 +22,19 @@ def get_products(supplier_id: int) -> List[Dict[str, Any]]:
     r.raise_for_status()
     return r.json()
 
+# api_client.py
+def get_products(supplier_id: int):
+    # שימי לב ל־/ בסוף הנתיב
+    r = requests.get(
+        _url("/api/v1/products/"),
+        params={"supplier_id": supplier_id},
+        timeout=10,
+    )
+    if r.status_code >= 400:
+        raise RuntimeError(_err(r))
+    return r.json()
+
+
 def create_product(payload: Dict[str, Any]) -> Dict[str, Any]:
     r = requests.post(_url("/api/v1/products"), json=payload, timeout=15)
     if r.status_code >= 400:
@@ -45,3 +58,17 @@ def delete_product(product_id: int) -> None:
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
 
+# ---- Orders API ----
+def get_orders_for_supplier(supplier_id: int):
+    """
+    מחזיר את רשימת ההזמנות של ספק נתון.
+    דורש שקיים צד שרת בנתיב GET /api/v1/orders?supplier_id=...
+    """
+    r = requests.get(
+        _url("/api/v1/orders/"),
+        params={"supplier_id": supplier_id},
+        timeout=20,
+    )
+    if r.status_code >= 400:
+        raise RuntimeError(_err(r))
+    return r.json()
