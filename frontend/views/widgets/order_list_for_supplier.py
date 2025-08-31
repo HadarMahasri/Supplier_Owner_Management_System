@@ -184,7 +184,7 @@ class OrdersForSupplier(QWidget):
         for i, (header_text, width) in enumerate(zip(headers, widths)):
             label = QLabel(header_text)
             label.setObjectName("headerLabel")
-            label.setAlignment(Qt.AlignCenter)
+            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
             label.setMinimumWidth(width)
             if i < len(headers) - 1:  # לא האחרון
                 label.setMaximumWidth(width)
@@ -280,6 +280,8 @@ class OrdersForSupplier(QWidget):
             color: #065f46;
             padding: 12px 8px;
             font-size: 14px;
+             text-align: right;
+
         }
         
         /* שורות ההזמנות */
@@ -298,6 +300,8 @@ class OrdersForSupplier(QWidget):
             color: #065f46;
             font-size: 14px;
             font-weight: 500;
+            text-align: right;
+
         }
         
         /* כפתורי סטטוס */
@@ -455,7 +459,7 @@ class OrdersForSupplier(QWidget):
         # צור הזמנות חדשות
         if not orders_list:
             no_orders_label = QLabel("לא נמצאו הזמנות בהתאם לסינון הנוכחי.")
-            no_orders_label.setAlignment(Qt.AlignCenter)
+            no_orders_label.setAlignment(Qt.AlignRight)
             no_orders_label.setStyleSheet("color: #6b7280; padding: 32px; font-size: 16px;")
             self.orders_layout.addWidget(no_orders_label)
         else:
@@ -506,7 +510,7 @@ class OrdersForSupplier(QWidget):
         # מס' הזמנה
         id_label = QLabel(f"#{order_id}")
         id_label.setObjectName("orderCell")
-        id_label.setAlignment(Qt.AlignCenter)
+        id_label.setAlignment(Qt.AlignRight)
         id_label.setMinimumWidth(100)
         id_label.setMaximumWidth(100)
         
@@ -523,7 +527,7 @@ class OrdersForSupplier(QWidget):
         
         date_label = QLabel(date_str)
         date_label.setObjectName("orderCell")
-        date_label.setAlignment(Qt.AlignCenter)
+        date_label.setAlignment(Qt.AlignRight)
         date_label.setMinimumWidth(100)
         date_label.setMaximumWidth(100)
         
