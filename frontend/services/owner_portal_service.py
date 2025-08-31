@@ -1,14 +1,21 @@
 import os, requests
 
-API_BASE = os.getenv("API_BASE", "http://127.0.0.1:8000/api/v1")  
+API_BASE = os.getenv("API_BASE") or "http://127.0.0.1:8000"
+API_BASE = API_BASE.rstrip("/")
+if not API_BASE.endswith("/api/v1"):
+    API_BASE = API_BASE + "/api/v1"
+
+def _url(path: str) -> str:
+    # path צריך להתחיל ב-"/owner-links/..." וכד'
+    return f"{API_BASE}{path}"
 
 def _get(path: str, params: dict):
-    r = requests.get(f"{API_BASE}{path}", params=params, timeout=10)
+    r = requests.get(_url(path), params=params, timeout=10)
     r.raise_for_status()
     return r.json()
 
 def _post(path: str, params: dict):
-    r = requests.post(f"{API_BASE}{path}", params=params, timeout=10)
+    r = requests.post(_url(path), params=params, timeout=10)
     r.raise_for_status()
     return r.json()
 
