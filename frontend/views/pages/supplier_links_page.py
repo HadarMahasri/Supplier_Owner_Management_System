@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QPushButton, QLabel, QMessageBox, QApplication, QAbstractItemView, QFrame, QScrollArea, QCheckBox
 )
 
-from frontend.services.links_service import (
+from services.links_service import (
     get_active_links as _get_active_links,
     get_pending_links as _get_pending_links,
     approve_link as _approve_link,
@@ -555,11 +555,3 @@ class SupplierLinksPage(QWidget):
             _reject_link(oid, self.supplier_id)
         self.refresh()
 
-
-if __name__ == "__main__":
-    import sys
-    app = QApplication(sys.argv)
-    w = SupplierLinksPage(supplier_id=4)
-    w.resize(1100, 700)
-    w.show()
-    sys.exit(app.exec())

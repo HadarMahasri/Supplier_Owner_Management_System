@@ -408,10 +408,3 @@ class OwnerLinksPage(QWidget):
         dlg.exec()
 
 
-
-if __name__ == "__main__":
-    import sys
-    app = QApplication(sys.argv)
-    w = OwnerLinksPage(owner_id=6)  # דוגמה
-    w.resize(1100, 700); w.show()
-    sys.exit(app.exec())

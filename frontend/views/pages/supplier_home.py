@@ -1,9 +1,10 @@
 # frontend/views/pages/supplier_home.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QScrollArea, QMessageBox, QStackedWidget, QSizePolicy
+    QScrollArea, QMessageBox, QStackedWidget, QSizePolicy, QGraphicsDropShadowEffect
 )
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QPropertyAnimation, QEasingCurve
+from PySide6.QtGui import QColor
 import os
 from typing import Dict
 import json, datetime
@@ -13,6 +14,132 @@ import json, datetime
 from views.widgets.order_list_for_supplier import OrdersForSupplier
 
 
+class SideMenu(QFrame):
+    """תפריט צידי"""
+    page_requested = Signal(str)
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("sideMenu")
+        self.setFixedWidth(280)
+        self.setup_ui()
+        self.setup_styles()
+        
+    def setup_ui(self):
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+        
+        # כותרת התפריט
+        header = QFrame()
+        header.setObjectName("menuHeader")
+        header.setFixedHeight(60)
+        
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(24, 16, 24, 16)
+        
+        title = QLabel("תפריט ספק")
+        title.setObjectName("menuTitle")
+        header_layout.addWidget(title)
+        
+        # כפתור סגירה
+        close_btn = QPushButton("✕")
+        close_btn.setObjectName("closeBtn")
+        close_btn.setFixedSize(32, 32)
+        close_btn.clicked.connect(self.hide)
+        header_layout.addWidget(close_btn)
+        
+        layout.addWidget(header)
+        
+        # רשימת פריטי תפריט
+        menu_items = [
+            ("orders", "ניהול הזמנות"),
+            ("products", "ניהול מוצרים"),
+            ("links", "קישורים עם בעלי חנויות"),
+            ("reports", "דוחות מכירות"),
+            ("settings", "הגדרות ספק"),
+            ("help", "עזרה ותמיכה")
+        ]
+        
+        menu_container = QWidget()
+        menu_layout = QVBoxLayout(menu_container)
+        menu_layout.setContentsMargins(16, 24, 16, 24)
+        menu_layout.setSpacing(8)
+        
+        for action, text in menu_items:
+            btn = self.create_menu_button(action, text)
+            menu_layout.addWidget(btn)
+        
+        menu_layout.addStretch()
+        layout.addWidget(menu_container)
+        
+    def create_menu_button(self, action: str, text: str) -> QPushButton:
+        btn = QPushButton(text)
+        btn.setObjectName("menuItem")
+        btn.clicked.connect(lambda: self.on_menu_click(action))
+        return btn
+        
+    def on_menu_click(self, action: str):
+        if action in ["orders", "products", "links"]:
+            self.page_requested.emit(action)
+            self.hide()
+        else:
+            # פעולות עתידיות
+            QMessageBox.information(self, "בקרוב", f"תכונה '{action}' תהיה זמינה בקרוב")
+    
+    def setup_styles(self):
+        self.setStyleSheet("""
+            QFrame#sideMenu {
+                background: #ffffff;
+                border: 1px solid #e5e7eb;
+                border-radius: 0px 8px 8px 0px;
+            }
+            
+            QFrame#menuHeader {
+                background: #f8fafc;
+                border-bottom: 1px solid #e5e7eb;
+                border-radius: 0px 8px 0px 0px;
+            }
+            
+            QLabel#menuTitle {
+                font-size: 18px;
+                font-weight: 700;
+                color: #111827;
+            }
+            
+            QPushButton#closeBtn {
+                background: transparent;
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                color: #6b7280;
+                font-size: 14px;
+            }
+            QPushButton#closeBtn:hover {
+                background: #f3f4f6;
+                color: #374151;
+            }
+            
+            QPushButton#menuItem {
+                background: transparent;
+                border: none;
+                border-radius: 8px;
+                padding: 14px 16px;
+                text-align: left;
+                font-size: 14px;
+                font-weight: 500;
+                color: #374151;
+                min-height: 20px;
+            }
+            QPushButton#menuItem:hover {
+                background: #f0fdf4;
+                color: #059669;
+            }
+            QPushButton#menuItem:pressed {
+                background: #dcfce7;
+            }
+        """)
+
+
 class SupplierHome(QWidget):
     logout_requested = Signal()
     
@@ -20,6 +147,9 @@ class SupplierHome(QWidget):
         super().__init__()
         self.user_data = user_data
         self.base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
+        
+        # התפריט הצידי
+        self.side_menu = None
         
         self.setup_ui()
         self.setup_styles()
@@ -45,8 +175,6 @@ class SupplierHome(QWidget):
         # Stacked widget for different content views
         self.content_stack = QStackedWidget()
         self.content_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        scroll_area.setWidget(self.content_stack)
-        main_layout.addWidget(scroll_area, 1)  # ← מקבל את כל הגובה שמתחת לטופ־בר
         
         # Page 1: Orders list (default)
         orders_page = self.create_orders_page()
@@ -56,11 +184,18 @@ class SupplierHome(QWidget):
         products_page = self.create_products_page()
         self.content_stack.addWidget(products_page)
         
+        # Page 3: Links management (NEW!)
+        links_page = self.create_links_page()
+        self.content_stack.addWidget(links_page)
+        
         scroll_area.setWidget(self.content_stack)
-        main_layout.addWidget(scroll_area)
+        main_layout.addWidget(scroll_area, 1)
         
         # Start with orders page (index 0)
         self.content_stack.setCurrentIndex(0)
+        
+        # יצירת התפריט הצידי
+        self.create_side_menu()
     
     def create_orders_page(self) -> QWidget:
         """יצירת עמוד ההזמנות (המקורי)"""
@@ -73,41 +208,66 @@ class SupplierHome(QWidget):
         supplier_id = self.user_data.get('id')
         self.orders_widget = OrdersForSupplier(supplier_id)
         self.orders_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        content_layout.addWidget(self.orders_widget, 1)  # ← מקבל גובה
+        content_layout.addWidget(self.orders_widget, 1)
                 
         return content_widget
     
     def create_products_page(self) -> QWidget:
         """יצירת עמוד ניהול המוצרים"""
-        # Import כאן כדי למנוע circular imports
         try:
             from views.pages.supplier_products_page import SupplierProductsPage
             supplier_id = self.user_data.get('id', 1)
             products_widget = SupplierProductsPage(supplier_id)
             return products_widget
         except ImportError as e:
-            # Fallback אם אין את הקובץ
-            error_widget = QWidget()
-            error_layout = QVBoxLayout(error_widget)
-            error_layout.setContentsMargins(50, 50, 50, 50)
-            
-            error_label = QLabel(f"שגיאה בטעינת עמוד המוצרים:\n{str(e)}")
-            error_label.setAlignment(Qt.AlignCenter)
-            error_label.setStyleSheet("font-size: 16px; color: #dc2626; padding: 20px;")
-            
-            back_btn = QPushButton("חזור לרשימת הזמנות")
-            back_btn.clicked.connect(lambda: self.show_orders_page())
-            back_btn.setObjectName("primaryBtn")
-            
-            error_layout.addStretch()
-            error_layout.addWidget(error_label)
-            error_layout.addWidget(back_btn, 0, Qt.AlignCenter)
-            error_layout.addStretch()
-            
-            return error_widget
+            return self.create_error_page(f"שגיאה בטעינת עמוד המוצרים:\n{str(e)}")
+    
+    def create_links_page(self) -> QWidget:
+        """יצירת עמוד ניהול הקישורים (החדש!)"""
+        try:
+            from views.pages.supplier_links_page import SupplierLinksPage
+            supplier_id = self.user_data.get('id', 1)
+            links_widget = SupplierLinksPage(supplier_id)
+            return links_widget
+        except ImportError as e:
+            return self.create_error_page(f"שגיאה בטעינת עמוד הקישורים:\n{str(e)}")
+    
+    def create_error_page(self, error_msg: str) -> QWidget:
+        """יצירת עמוד שגיאה"""
+        error_widget = QWidget()
+        error_layout = QVBoxLayout(error_widget)
+        error_layout.setContentsMargins(50, 50, 50, 50)
+        
+        error_label = QLabel(error_msg)
+        error_label.setAlignment(Qt.AlignCenter)
+        error_label.setStyleSheet("font-size: 16px; color: #dc2626; padding: 20px;")
+        
+        back_btn = QPushButton("חזור לרשימת הזמנות")
+        back_btn.clicked.connect(lambda: self.show_orders_page())
+        back_btn.setObjectName("primaryBtn")
+        
+        error_layout.addStretch()
+        error_layout.addWidget(error_label)
+        error_layout.addWidget(back_btn, 0, Qt.AlignCenter)
+        error_layout.addStretch()
+        
+        return error_widget
+    
+    def create_side_menu(self):
+        """יצירת התפריט הצידי"""
+        self.side_menu = SideMenu(self)
+        self.side_menu.page_requested.connect(self.show_page)
+        self.side_menu.hide()
+        
+        # הוספת צל
+        shadow = QGraphicsDropShadowEffect()
+        shadow.setBlurRadius(15)
+        shadow.setColor(QColor(0, 0, 0, 80))
+        shadow.setOffset(3, 0)
+        self.side_menu.setGraphicsEffect(shadow)
     
     def create_topbar(self) -> QWidget:
-        """יצירת topbar קבוע"""
+        """יצירת topbar קבוע - בדיוק כמו המקור עם תפריט המבורגר"""
         topbar = QFrame()
         topbar.setObjectName("topbar")
         topbar.setFixedHeight(60)
@@ -116,11 +276,11 @@ class SupplierHome(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(12)
         
-        # Menu button (☰)
+        # Menu button (☰) - עכשיו פותח תפריט צידי
         menu_btn = QPushButton("☰")
         menu_btn.setObjectName("menuBtn")
         menu_btn.setFixedSize(40, 40)
-        menu_btn.clicked.connect(self.show_menu)
+        menu_btn.clicked.connect(self.toggle_side_menu)
         
         # Title
         supplier_name = self.user_data.get('contact_name', 'ספק')
@@ -132,7 +292,7 @@ class SupplierHome(QWidget):
         title = QLabel(title_text)
         title.setObjectName("title")
         
-        # Actions - עכשיו עם יותר אפשרויות
+        # Actions - כפתורי המקור
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(8)
         
@@ -245,16 +405,30 @@ class SupplierHome(QWidget):
             }
         """)
     
-    # Navigation methods - החדשים!
+    # Navigation methods
+    def show_page(self, page: str):
+        """מעבר לעמוד הרצוי"""
+        page_mapping = {
+            "orders": 0,
+            "products": 1, 
+            "links": 2
+        }
+        
+        if page in page_mapping:
+            self.content_stack.setCurrentIndex(page_mapping[page])
+            self.update_buttons_state(page)
+    
     def show_orders_page(self):
         """מעבר לעמוד הזמנות"""
-        self.content_stack.setCurrentIndex(0)
-        self.update_buttons_state(active_page="orders")
+        self.show_page("orders")
     
     def show_products_page(self):
         """מעבר לעמוד ניהול מוצרים"""
-        self.content_stack.setCurrentIndex(1)
-        self.update_buttons_state(active_page="products")
+        self.show_page("products")
+    
+    def show_links_page(self):
+        """מעבר לעמוד קישורים"""
+        self.show_page("links")
     
     def update_buttons_state(self, active_page: str):
         """עדכון מראה הכפתורים לפי העמוד הפעיל"""
@@ -277,7 +451,7 @@ class SupplierHome(QWidget):
                 orders_btn.setObjectName("primaryBtn")
             if products_btn:
                 products_btn.setObjectName("secondaryBtn")
-        else:  # products
+        else:  # products or links
             if orders_btn:
                 orders_btn.setObjectName("secondaryBtn")
             if products_btn:
@@ -286,24 +460,36 @@ class SupplierHome(QWidget):
         # רענון הסגנון
         self.setup_styles()
     
+    # Side menu methods
+    def toggle_side_menu(self):
+        """פתיחה/סגירה של התפריט הצידי"""
+        if self.side_menu.isVisible():
+            self.hide_side_menu()
+        else:
+            self.show_side_menu()
+    
+    def show_side_menu(self):
+        """הצגת התפריט הצידי - בצד שמאל מתחת לטופבר"""
+        # מיקום התפריט בצד שמאל מתחת לטופבר
+        menu_height = min(400, self.height() - 60)
+        self.side_menu.resize(280, menu_height)
+        
+        # מיקום ביחס לחלון הראשי
+        menu_x = 0  # בצד שמאל
+        menu_y = 60  # מתחת לטופבר
+        
+        self.side_menu.move(menu_x, menu_y)
+        self.side_menu.show()
+        self.side_menu.raise_()
+    
+    def hide_side_menu(self):
+        """הסתרת התפריט הצידי"""
+        self.side_menu.hide()
+    
     # Event handlers המקוריים
     def show_menu(self):
-        """הצגת תפריט"""
-        menu_options = [
-            "📊 דוח מכירות",
-            "📦 ניהול מוצרים", 
-            "🏪 ניהול הזמנות",
-            "⚙️ הגדרות ספק",
-            "📞 צור קשר",
-            "📖 עזרה ותמיכה"
-        ]
-        
-        menu_text = "תפריט ספק:\n\n" + "\n".join(menu_options)
-        
-        # הוספת פעולות לתפריט
-        reply = QMessageBox.information(self, "תפריט", menu_text + "\n\nלחץ OK להמשך")
-        
-        # אפשר להוסיף לוגיקה נוספת כאן לעתיד
+        """הצגת תפריט - עכשיו פותח תפריט צידי"""
+        self.toggle_side_menu()
     
     def show_management(self):
         """ניהול מערכת - עכשיו מפנה לניהול מוצרים"""
@@ -319,5 +505,7 @@ class SupplierHome(QWidget):
         current_widget = self.content_stack.currentWidget()
         if hasattr(current_widget, 'reload_from_server'):
             current_widget.reload_from_server()
+        elif hasattr(current_widget, 'refresh'):
+            current_widget.refresh()
         
         QMessageBox.information(self, "רענון", "כל הנתונים רוענו בהצלחה!")
