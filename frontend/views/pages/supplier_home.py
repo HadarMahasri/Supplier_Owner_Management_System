@@ -10,8 +10,8 @@ from typing import Dict
 import json, datetime
 
 
-# Import the orders component and products page
-from views.widgets.order_list_for_supplier import OrdersForSupplier
+# Import the new orders page instead of the old widget
+from views.pages.supplier_orders_page import SupplierOrdersPage  # שינוי חשוב!
 
 
 class SideMenu(QFrame):
@@ -176,7 +176,7 @@ class SupplierHome(QWidget):
         self.content_stack = QStackedWidget()
         self.content_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # Page 1: Orders list (default)
+        # Page 1: Orders list (default) - משתמש בעמוד החדש!
         orders_page = self.create_orders_page()
         self.content_stack.addWidget(orders_page)
         
@@ -184,7 +184,7 @@ class SupplierHome(QWidget):
         products_page = self.create_products_page()
         self.content_stack.addWidget(products_page)
         
-        # Page 3: Links management (NEW!)
+        # Page 3: Links management
         links_page = self.create_links_page()
         self.content_stack.addWidget(links_page)
         
@@ -198,17 +198,17 @@ class SupplierHome(QWidget):
         self.create_side_menu()
     
     def create_orders_page(self) -> QWidget:
-        """יצירת עמוד ההזמנות (המקורי)"""
+        """יצירת עמוד ההזמנות - משתמש בארכיטקטורה החדשה"""
         content_widget = QWidget()
         content_layout = QVBoxLayout(content_widget)
         content_layout.setContentsMargins(16, 16, 16, 16)
         content_layout.setSpacing(20)
         
-        # Orders component - זה החלק המרכזי
+        # Orders page - משתמש בעמוד החדש במקום הוידג'ט הישן
         supplier_id = self.user_data.get('id')
-        self.orders_widget = OrdersForSupplier(supplier_id)
-        self.orders_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
-        content_layout.addWidget(self.orders_widget, 1)
+        self.orders_page = SupplierOrdersPage(supplier_id)  # שינוי חשוב!
+        self.orders_page.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        content_layout.addWidget(self.orders_page, 1)
                 
         return content_widget
     
@@ -223,7 +223,7 @@ class SupplierHome(QWidget):
             return self.create_error_page(f"שגיאה בטעינת עמוד המוצרים:\n{str(e)}")
     
     def create_links_page(self) -> QWidget:
-        """יצירת עמוד ניהול הקישורים (החדש!)"""
+        """יצירת עמוד ניהול הקישורים"""
         try:
             from views.pages.supplier_links_page import SupplierLinksPage
             supplier_id = self.user_data.get('id', 1)
@@ -267,7 +267,7 @@ class SupplierHome(QWidget):
         self.side_menu.setGraphicsEffect(shadow)
     
     def create_topbar(self) -> QWidget:
-        """יצירת topbar קבוע - בדיוק כמו המקור עם תפריט המבורגר"""
+        """יצירת topbar קבוע"""
         topbar = QFrame()
         topbar.setObjectName("topbar")
         topbar.setFixedHeight(60)
@@ -276,7 +276,7 @@ class SupplierHome(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(12)
         
-        # Menu button (☰) - עכשיו פותח תפריט צידי
+        # Menu button (☰)
         menu_btn = QPushButton("☰")
         menu_btn.setObjectName("menuBtn")
         menu_btn.setFixedSize(40, 40)
@@ -291,36 +291,36 @@ class SupplierHome(QWidget):
             
         title = QLabel(title_text)
         title.setObjectName("title")
+        title.setAlignment(Qt.AlignCenter)   # מרכז את הטקסט
         
-        # Actions - כפתורי המקור
+        # Actions - הכפתורים בצד שמאל
         actions_layout = QHBoxLayout()
         actions_layout.setSpacing(8)
         
-        # כפתור הזמנות
-        orders_btn = QPushButton("רשימת הזמנות")
-        orders_btn.setObjectName("secondaryBtn")
-        orders_btn.clicked.connect(self.show_orders_page)
-        
-        # כפתור ניהול מוצרים (החדש!)
-        products_btn = QPushButton("ניהול מוצרים")
-        products_btn.setObjectName("primaryBtn")
-        products_btn.clicked.connect(self.show_products_page)
-        
-        # התנתק button
         logout_btn = QPushButton("התנתק")
         logout_btn.setObjectName("ghostBtn")
         logout_btn.clicked.connect(self.logout_requested.emit)
         
+        orders_btn = QPushButton("רשימת הזמנות")
+        orders_btn.setObjectName("secondaryBtn")
+        orders_btn.clicked.connect(self.show_orders_page)
+        
+        products_btn = QPushButton("ניהול מוצרים")
+        products_btn.setObjectName("primaryBtn")
+        products_btn.clicked.connect(self.show_products_page)
+        
+        # סדר חדש: התנתק הכי שמאלי
+        actions_layout.addWidget(logout_btn)
         actions_layout.addWidget(orders_btn)
         actions_layout.addWidget(products_btn)
-        actions_layout.addWidget(logout_btn)
         
-        # Layout assembly
-        layout.addWidget(menu_btn)
-        layout.addWidget(title, 1)  # stretch
-        layout.addLayout(actions_layout)
+        # סידור כללי בלייאאוט הראשי
+        layout.addLayout(actions_layout)   # שמאל
+        layout.addWidget(title, 1)         # מרכז עם stretch
+        layout.addWidget(menu_btn)         # ימין
         
         return topbar
+
     
     def setup_styles(self):
         """סגנונות מעודכנים"""
@@ -497,9 +497,9 @@ class SupplierHome(QWidget):
     
     def refresh_all_data(self):
         """רענון כל הנתונים"""
-        # רענון הזמנות
-        if hasattr(self, 'orders_widget'):
-            self.orders_widget.refresh_orders()
+        # רענון הזמנות - משתמש בעמוד החדש
+        if hasattr(self, 'orders_page'):
+            self.orders_page.refresh_orders()
         
         # רענון מוצרים
         current_widget = self.content_stack.currentWidget()
@@ -508,4 +508,4 @@ class SupplierHome(QWidget):
         elif hasattr(current_widget, 'refresh'):
             current_widget.refresh()
         
-        QMessageBox.information(self, "רענון", "כל הנתונים רוענו בהצלחה!")
+        QMessageBox.information(self, "רענון", "כל הנתונים רועננו בהצלחה!")

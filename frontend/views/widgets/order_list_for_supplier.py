@@ -14,7 +14,6 @@ import json
 import pandas as pd
 
 
-
 class OrdersFetchThread(QThread):
     """Thread לטעינת הזמנות מהשרת"""
     orders_loaded = Signal(list)
@@ -45,6 +44,7 @@ class OrdersFetchThread(QThread):
         except Exception:
             return []
     
+
 class OrdersForSupplier(QWidget):
     """רכיב רשימת הזמנות לספק"""
     
@@ -91,14 +91,14 @@ class OrdersForSupplier(QWidget):
         
         # הגדרות חשובות עבור ה-container
         self.orders_container = QWidget()
-        self.orders_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)  # שינוי חשוב!
+        self.orders_container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Maximum)
         
         self.orders_layout = QVBoxLayout(self.orders_container)
         self.orders_layout.setContentsMargins(0, 0, 0, 0)
         self.orders_layout.setSpacing(2)
         
         scroll_area.setWidget(self.orders_container)
-        main_layout.addWidget(scroll_area, 1)  # stretch
+        main_layout.addWidget(scroll_area, 1)
 
     def create_filter_bar(self) -> QWidget:
         """יצירת פס הפילטרים"""
@@ -109,25 +109,37 @@ class OrdersForSupplier(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(16)
         
-        # קבוצת פילטר תאריכים
+        # כפתורי פעולות - מימין
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(10)
+        
+        # היסטוריה / פעילות
+        self.history_btn = QPushButton("לצפייה בהיסטוריית ההזמנות")
+        self.history_btn.setObjectName("historyBtn")
+        self.history_btn.clicked.connect(self.toggle_history_view)
+        
+        # ייצוא לאקסל
+        self.export_btn = QPushButton("📥 ייצא ל-Excel (0 הזמנות)")
+        self.export_btn.setObjectName("exportBtn")
+        self.export_btn.clicked.connect(self.export_to_excel)
+        
+        actions_layout.addWidget(self.history_btn)
+        actions_layout.addWidget(self.export_btn)
+        
+        layout.addLayout(actions_layout)
+        layout.addStretch()
+        
+        # קבוצת פילטר תאריכים - משמאל
         filter_group = QFrame()
         filter_layout = QHBoxLayout(filter_group)
         filter_layout.setContentsMargins(0, 0, 0, 0)
         filter_layout.setSpacing(12)
         
-        filter_label = QLabel("סינון לפי תאריך:")
-        filter_label.setObjectName("filterLabel")
-        filter_layout.addWidget(filter_label)
-        
-        # מתאריך
-        from_label = QLabel("מתאריך")
-        self.date_from = QDateEdit()
-        self.date_from.setDate(QDate.currentDate().addDays(-30))
-        self.date_from.setObjectName("dateInput")
-        self.date_from.dateChanged.connect(self.on_date_filter_changed)
-        
-        filter_layout.addWidget(from_label)
-        filter_layout.addWidget(self.date_from)
+        # כפתור ניקוי פילטר
+        self.clear_filter_btn = QPushButton("בטל סינון")
+        self.clear_filter_btn.setObjectName("clearFilterBtn")
+        self.clear_filter_btn.clicked.connect(self.clear_date_filter)
+        filter_layout.addWidget(self.clear_filter_btn)
         
         # עד תאריך
         to_label = QLabel("עד תאריך")
@@ -136,36 +148,24 @@ class OrdersForSupplier(QWidget):
         self.date_to.setObjectName("dateInput")
         self.date_to.dateChanged.connect(self.on_date_filter_changed)
         
-        filter_layout.addWidget(to_label)
         filter_layout.addWidget(self.date_to)
+        filter_layout.addWidget(to_label)
         
-        # כפתור ניקוי פילטר
-        self.clear_filter_btn = QPushButton("בטל סינון")
-        self.clear_filter_btn.setObjectName("clearFilterBtn")
-        self.clear_filter_btn.clicked.connect(self.clear_date_filter)
-        filter_layout.addWidget(self.clear_filter_btn)
+        # מתאריך
+        from_label = QLabel("מתאריך")
+        self.date_from = QDateEdit()
+        self.date_from.setDate(QDate.currentDate().addDays(-30))
+        self.date_from.setObjectName("dateInput")
+        self.date_from.dateChanged.connect(self.on_date_filter_changed)
+        
+        filter_layout.addWidget(self.date_from)
+        filter_layout.addWidget(from_label)
+        
+        filter_label = QLabel("סינון לפי תאריך:")
+        filter_label.setObjectName("filterLabel")
+        filter_layout.addWidget(filter_label)
         
         layout.addWidget(filter_group)
-        layout.addStretch()
-        
-        # כפתורי פעולות
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(10)
-        
-        # יצוא לאקסל
-        self.export_btn = QPushButton("📥 ייצא ל-Excel (0 הזמנות)")
-        self.export_btn.setObjectName("exportBtn")
-        self.export_btn.clicked.connect(self.export_to_excel)
-        
-        # היסטוריה / פעילות
-        self.history_btn = QPushButton("לצפייה בהיסטוריית ההזמנות")
-        self.history_btn.setObjectName("historyBtn")
-        self.history_btn.clicked.connect(self.toggle_history_view)
-        
-        actions_layout.addWidget(self.export_btn)
-        actions_layout.addWidget(self.history_btn)
-        
-        layout.addLayout(actions_layout)
         
         return filter_frame
     
@@ -178,19 +178,98 @@ class OrdersForSupplier(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(0)
         
-        headers = ["מס' הזמנה", "תאריך", "שם חנות", "סכום ההזמנה", "סטטוס", "פעולה", ""]
-        widths = [100, 100, 200, 120, 120, 180, 30]
+        # שינוי: הכותרות כעת מסודרות מימין לשמאל
+        headers = ["", "פעולה", "סטטוס", "סכום ההזמנה", "שם חנות", "תאריך", "מס' הזמנה"]
+        widths = [30, 180, 120, 120, 200, 100, 100]
         
         for i, (header_text, width) in enumerate(zip(headers, widths)):
             label = QLabel(header_text)
             label.setObjectName("headerLabel")
-            label.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            label.setAlignment(Qt.AlignCenter)  # יישור מרכזי לכותרות
             label.setMinimumWidth(width)
-            if i < len(headers) - 1:  # לא האחרון
+            if i < len(headers) - 1:
                 label.setMaximumWidth(width)
             layout.addWidget(label)
         
         return header
+    
+    def _create_order_main_row(self, order: Dict) -> QWidget:
+        """יצירת השורה הראשית של ההזמנה"""
+        row = QFrame()
+        row.setObjectName("orderRow")
+        
+        layout = QHBoxLayout(row)
+        layout.setContentsMargins(16, 12, 16, 12)
+        layout.setSpacing(0)
+        
+        order_id = order.get("id", 0)
+        
+        # כפתור הרחבה - מימין
+        expand_btn = QPushButton("🔽" if order_id not in self.expanded_orders else "🔼")
+        expand_btn.setObjectName("expandBtn")
+        expand_btn.setFixedSize(30, 30)
+        expand_btn.clicked.connect(lambda: self._toggle_expand(order_id))
+        
+        # פעולה
+        action_btn = self._create_action_button(order)
+        action_btn.setMinimumWidth(180)
+        action_btn.setMaximumWidth(180)
+        
+        # סטטוס כפתור
+        status_btn = self._create_status_button(order)
+        status_btn.setMinimumWidth(120)
+        status_btn.setMaximumWidth(120)
+        
+        # סכום
+        total = order.get("total_amount", 0)
+        amount_label = QLabel(f"₪ {total:,.2f}")
+        amount_label.setObjectName("orderCell")
+        amount_label.setAlignment(Qt.AlignCenter)
+        amount_label.setMinimumWidth(120)
+        amount_label.setMaximumWidth(120)
+        
+        # שם חנות
+        store_name = order.get("owner_company", "חנויות מקורי בע\"מ")
+        store_label = QLabel(store_name)
+        store_label.setObjectName("orderCell")
+        store_label.setAlignment(Qt.AlignCenter)
+        store_label.setMinimumWidth(200)
+        store_label.setMaximumWidth(200)
+        
+        # תאריך
+        created_date = order.get("created_date", "")
+        if created_date:
+            try:
+                dt = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
+                date_str = dt.strftime("%d.%m.%Y")
+            except:
+                date_str = created_date[:10]
+        else:
+            date_str = ""
+        
+        date_label = QLabel(date_str)
+        date_label.setObjectName("orderCell")
+        date_label.setAlignment(Qt.AlignCenter)
+        date_label.setMinimumWidth(100)
+        date_label.setMaximumWidth(100)
+        
+        # מס' הזמנה - משמאל
+        id_label = QLabel(f"#{order_id}")
+        id_label.setObjectName("orderCell")
+        id_label.setAlignment(Qt.AlignCenter)
+        id_label.setMinimumWidth(100)
+        id_label.setMaximumWidth(100)
+        
+        # הוספה ללייאאוט מימין לשמאל
+        layout.addWidget(expand_btn)
+        layout.addWidget(action_btn)
+        layout.addWidget(status_btn)
+        layout.addWidget(amount_label)
+        layout.addWidget(store_label)
+        layout.addWidget(date_label)
+        layout.addWidget(id_label)
+        
+        return row
     
     def setup_styles(self):
         self.setStyleSheet("""
@@ -280,8 +359,6 @@ class OrdersForSupplier(QWidget):
             color: #065f46;
             padding: 12px 8px;
             font-size: 14px;
-             text-align: right;
-
         }
         
         /* שורות ההזמנות */
@@ -300,8 +377,6 @@ class OrdersForSupplier(QWidget):
             color: #065f46;
             font-size: 14px;
             font-weight: 500;
-            text-align: right;
-
         }
         
         /* כפתורי סטטוס */
@@ -421,6 +496,7 @@ class OrdersForSupplier(QWidget):
         }
     """)
     
+    # המשך המתודות כמו שהיו...
     def load_orders(self):
         """טעינת הזמנות"""
         if not self.supplier_id:
@@ -440,7 +516,6 @@ class OrdersForSupplier(QWidget):
     def _on_error(self, error: str):
         """טיפול בשגיאות"""
         QMessageBox.warning(self, "שגיאה", error)
-        
     
     def _update_orders_display(self, orders_list: List[Dict] = None):
         """עדכון תצוגת ההזמנות"""
@@ -453,13 +528,13 @@ class OrdersForSupplier(QWidget):
             if child:
                 child.setParent(None)
         
-        # עדכן מונה יצוא
+        # עדכן מונה ייצוא
         self.export_btn.setText(f"📥 ייצא ל-Excel ({len(orders_list)} הזמנות)")
         
         # צור הזמנות חדשות
         if not orders_list:
             no_orders_label = QLabel("לא נמצאו הזמנות בהתאם לסינון הנוכחי.")
-            no_orders_label.setAlignment(Qt.AlignRight)
+            no_orders_label.setAlignment(Qt.AlignCenter)
             no_orders_label.setStyleSheet("color: #6b7280; padding: 32px; font-size: 16px;")
             self.orders_layout.addWidget(no_orders_label)
         else:
@@ -472,10 +547,8 @@ class OrdersForSupplier(QWidget):
             spacer = QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding)
             self.orders_layout.addItem(spacer)
         else:
-            # אם אין הזמנות, הוסף stretch כדי למרכז את ההודעה
             self.orders_layout.addStretch()
 
-    
     def _create_order_widget(self, order: Dict) -> QWidget:
         """יצירת widget של הזמנה"""
         container = QFrame()
@@ -495,84 +568,6 @@ class OrdersForSupplier(QWidget):
             layout.addWidget(details)
         
         return container
-    
-    def _create_order_main_row(self, order: Dict) -> QWidget:
-        """יצירת השורה הראשית של ההזמנה"""
-        row = QFrame()
-        row.setObjectName("orderRow")
-        
-        layout = QHBoxLayout(row)
-        layout.setContentsMargins(16, 12, 16, 12)
-        layout.setSpacing(0)
-        
-        order_id = order.get("id", 0)
-        
-        # מס' הזמנה
-        id_label = QLabel(f"#{order_id}")
-        id_label.setObjectName("orderCell")
-        id_label.setAlignment(Qt.AlignRight)
-        id_label.setMinimumWidth(100)
-        id_label.setMaximumWidth(100)
-        
-        # תאריך
-        created_date = order.get("created_date", "")
-        if created_date:
-            try:
-                dt = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
-                date_str = dt.strftime("%d.%m.%Y")
-            except:
-                date_str = created_date[:10]
-        else:
-            date_str = ""
-        
-        date_label = QLabel(date_str)
-        date_label.setObjectName("orderCell")
-        date_label.setAlignment(Qt.AlignRight)
-        date_label.setMinimumWidth(100)
-        date_label.setMaximumWidth(100)
-        
-        # שם חנות
-        store_name = order.get("owner_company", "חנויות מקורי בע\"מ")
-        store_label = QLabel(store_name)
-        store_label.setObjectName("orderCell")
-        store_label.setMinimumWidth(200)
-        store_label.setMaximumWidth(200)
-        
-        # סכום
-        total = order.get("total_amount", 0)
-        amount_label = QLabel(f"₪ {total:,.2f}")
-        amount_label.setObjectName("orderCell")
-        amount_label.setAlignment(Qt.AlignRight)
-        amount_label.setMinimumWidth(120)
-        amount_label.setMaximumWidth(120)
-        
-        # סטטוס כפתור
-        status = order.get("status", "בתהליך")
-        status_btn = self._create_status_button(order)
-        status_btn.setMinimumWidth(120)
-        status_btn.setMaximumWidth(120)
-        
-        # פעולה
-        action_btn = self._create_action_button(order)
-        action_btn.setMinimumWidth(180)
-        action_btn.setMaximumWidth(180)
-        
-        # כפתור הרחבה
-        expand_btn = QPushButton("🔽" if order_id not in self.expanded_orders else "🔼")
-        expand_btn.setObjectName("expandBtn")
-        expand_btn.setFixedSize(30, 30)
-        expand_btn.clicked.connect(lambda: self._toggle_expand(order_id))
-        
-        # הוספה ללייאאוט
-        layout.addWidget(id_label)
-        layout.addWidget(date_label)
-        layout.addWidget(store_label)
-        layout.addWidget(amount_label)
-        layout.addWidget(status_btn)
-        layout.addWidget(action_btn)
-        layout.addWidget(expand_btn)
-        
-        return row
     
     def _create_status_button(self, order: Dict) -> QPushButton:
         """יצירת כפתור סטטוס/פעולה"""
@@ -597,7 +592,7 @@ class OrdersForSupplier(QWidget):
     def _create_action_button(self, order: Dict) -> QPushButton:
         """כפתור פעולה נוסף (כרגע ריק)"""
         btn = QPushButton("")
-        btn.setVisible(False)  # מוסתר כרגע
+        btn.setVisible(False)
         return btn
     
     def _create_order_details(self, order: Dict) -> QWidget:
@@ -666,13 +661,13 @@ class OrdersForSupplier(QWidget):
             
             table = QTableWidget()
             table.setColumnCount(3)
-            table.setHorizontalHeaderLabels(["מספר מוצר", "שם מוצר", "כמות"])
+            table.setHorizontalHeaderLabels(["כמות", "שם מוצר", "מספר מוצר"])
             table.setRowCount(len(items))
             
             for row, item in enumerate(items):
-                table.setItem(row, 0, QTableWidgetItem(str(item.get("product_id", ""))))
+                table.setItem(row, 0, QTableWidgetItem(str(item.get("quantity", 0))))
                 table.setItem(row, 1, QTableWidgetItem(item.get("product_name", "")))
-                table.setItem(row, 2, QTableWidgetItem(str(item.get("quantity", 0))))
+                table.setItem(row, 2, QTableWidgetItem(str(item.get("product_id", ""))))
             
             table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
             table.setMaximumHeight(300)
@@ -807,11 +802,11 @@ class OrdersForSupplier(QWidget):
         self._update_orders_display()
     
     def export_to_excel(self):
-        """יצוא להזמנות לקובץ Excel (או CSV)"""
+        """ייצוא להזמנות לקובץ Excel (או CSV)"""
         filtered_orders = self._get_filtered_orders()
 
         if not filtered_orders:
-            QMessageBox.information(self, "יצוא לאקסל", "אין הזמנות לייצא")
+            QMessageBox.information(self, "ייצוא לאקסל", "אין הזמנות לייצא")
             return
 
         try:
@@ -881,7 +876,7 @@ class OrdersForSupplier(QWidget):
                 df_products.to_csv(products_csv, index=False, encoding="utf-8-sig")
 
                 QMessageBox.information(
-                    self, "יצוא הושלם",
+                    self, "ייצוא הושלם",
                     f"נשמרו שני קבצי CSV:\n• {orders_csv}\n• {products_csv}"
                 )
             else:
@@ -896,11 +891,10 @@ class OrdersForSupplier(QWidget):
                         for col_idx, col in enumerate(df.columns):
                             ws.set_column(col_idx, col_idx, max(12, min(50, len(str(col)) + 6)))
 
-                QMessageBox.information(self, "יצוא הושלם", f"הקובץ נשמר בהצלחה:\n{path}")
+                QMessageBox.information(self, "ייצוא הושלם", f"הקובץ נשמר בהצלחה:\n{path}")
 
         except Exception as e:
-            QMessageBox.critical(self, "שגיאת יצוא", f"שגיאה בייצוא הקובץ:\n{str(e)}")
-
+            QMessageBox.critical(self, "שגיאת ייצוא", f"שגיאה בייצוא הקובץ:\n{str(e)}")
 
     def refresh_orders(self):
         """רענון רשימת הזמנות"""
