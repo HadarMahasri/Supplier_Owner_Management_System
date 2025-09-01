@@ -181,9 +181,6 @@ class StoreOwnerHome(QWidget):
         orders_page = self.create_orders_page()
         self.content_stack.addWidget(orders_page)
         
-        # Page 2: New order creation
-        new_order_page = self.create_new_order_page()
-        self.content_stack.addWidget(new_order_page)
         
         # Page 3: Suppliers list
         suppliers_page = self.create_suppliers_page()
@@ -212,16 +209,6 @@ class StoreOwnerHome(QWidget):
         content_layout.addWidget(self.orders_widget, 1)
                 
         return content_widget
-    
-    def create_new_order_page(self) -> QWidget:
-        """יצירת עמוד יצירת הזמנה חדשה"""
-        try:
-            from views.pages.order_create_dialog import OrderCreateDialog
-            owner_id = self.user_data.get('id', 1)
-            new_order_widget = OrderCreateDialog(owner_id)
-            return new_order_widget
-        except ImportError as e:
-            return self.create_error_page(f"שגיאה בטעינת עמוד יצירת הזמנה:\n{str(e)}")
     
     def create_suppliers_page(self) -> QWidget:
         """יצירת עמוד רשימת ספקים"""
