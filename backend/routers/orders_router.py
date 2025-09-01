@@ -99,13 +99,19 @@ def create_order(order: OrderCreate, owner_id: int, db: Session = Depends(get_db
         db.add(OrderItem(order_id=o.id, product_id=p.id, quantity=item.quantity))
 
     db.commit()
+    db.refresh(o)  # חשוב: מביא את created_date (ושאר ברירות־מחדל מה-DB)
 
+    # אם את רוצה להמשיך ולהחזיר עם פרטי מוצרים טעונים מראש – אפשר להשאיר את השאילתה,
+    # אבל זה כבר לא חובה בשביל created_date.
+    # להעדפה על שמירת ה-joinedload, אפשר:
     o = (
         db.query(Order)
         .options(joinedload(Order.owner), joinedload(Order.items).joinedload(OrderItem.product))
         .get(o.id)
     )
+
     return _order_to_response(o)
+
 
 @router.put("/{order_id}/status", response_model=dict)
 def update_order_status(order_id: int, status_update: OrderStatusUpdate, supplier_id: int, db: Session = Depends(get_db)):

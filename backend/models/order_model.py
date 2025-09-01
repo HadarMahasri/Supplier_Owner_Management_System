@@ -3,6 +3,7 @@ from sqlalchemy import Column, Integer, DateTime, ForeignKey
 from sqlalchemy.types import Unicode
 from sqlalchemy.orm import relationship
 from database.session import Base
+from sqlalchemy.sql import func
 
 class Order(Base):
     __tablename__ = "orders"
@@ -10,7 +11,7 @@ class Order(Base):
     owner_id     = Column(Integer, ForeignKey("users.id"), nullable=False)
     supplier_id  = Column(Integer, ForeignKey("users.id"), nullable=False)
     status       = Column(Unicode(20), nullable=False)  # "בתהליך" / "הושלמה" / "בוצעה"
-    created_date = Column(DateTime)
+    created_date = Column(DateTime, server_default=func.now(), nullable=False)
 
     owner    = relationship("User", foreign_keys=[owner_id])
     supplier = relationship("User", foreign_keys=[supplier_id])
