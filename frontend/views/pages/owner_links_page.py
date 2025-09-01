@@ -11,7 +11,6 @@ from services.owner_portal_service import (
     get_pending_by_owner as _get_pending,
     request_link as _request_link,
 )
-from views.pages.order_create_dialog import OrderCreateDialog
 
 
 class OwnerLinksPage(QWidget):
@@ -346,19 +345,4 @@ class OwnerLinksPage(QWidget):
             return
         # חלון יחיד: אם הגיע callback מהמסך הראשי – ננווט inline
         if callable(getattr(self, "open_order_inline", None)):
-            try:
-                self.open_order_inline(int(supplier_id))
-            except Exception:
-                # אם יש תקלה ב-callback, ננסה fallback לדיאלוג
-                try:
-                    dlg = OrderCreateDialog(self.owner_id, int(supplier_id), self)
-                    dlg.exec()
-                except Exception as e:
-                    QMessageBox.critical(self, "שגיאה", f"פתיחת הזמנה נכשלה: {e}")
-            return
-        # תאימות לאחור: דיאלוג
-        try:
-            dlg = OrderCreateDialog(self.owner_id, int(supplier_id), self)
-            dlg.exec()
-        except Exception as e:
-            QMessageBox.critical(self, "שגיאה", f"פתיחת הזמנה נכשלה: {e}")
+            self.open_order_inline(int(supplier_id))
