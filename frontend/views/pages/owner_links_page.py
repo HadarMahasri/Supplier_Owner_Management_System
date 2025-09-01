@@ -4,14 +4,14 @@ from PySide6.QtWidgets import (
     QApplication, QPushButton, QScrollArea, QFrame, QMessageBox
 )
 
-from frontend.services.owner_portal_service import (
+from services.owner_portal_service import (
     find_suppliers as _find_suppliers,
     get_active_by_owner as _get_active,
     get_pending_by_owner as _get_pending,
     request_link as _request_link,
     create_order as _create_order,
 )
-from frontend.views.pages.order_create_dialog import OrderCreateDialog
+from views.pages.order_create_dialog import OrderCreateDialog
 
 
 # עיצוב וכרטיסיות שואבים השראה מ-SupplierLinksPage

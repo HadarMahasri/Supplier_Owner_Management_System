@@ -130,3 +130,19 @@ def get_order_by_id(order_id: int, db: Session = Depends(get_db)):
     if not o:
         raise HTTPException(status_code=404, detail="הזמנה לא נמצאה")
     return _order_to_response(o)
+
+
+@router.put("/{order_id}/status/owner", response_model=dict)
+def update_order_status_by_owner(order_id: int, status_update: OrderStatusUpdate, owner_id: int, db: Session = Depends(get_db)):
+    """עדכון סטטוס הזמנה על ידי בעל חנות - רק אישור הגעה"""
+    o = db.query(Order).filter(Order.id == order_id, Order.owner_id == owner_id).first()
+    if not o:
+        raise HTTPException(status_code=404, detail="הזמנה לא נמצאה או אינה שייכת לך")
+    
+    # בעל חנות יכול רק לשנות מ"בתהליך" ל"הושלמה" 
+    if o.status != "בתהליך" or status_update.status != "הושלמה":
+        raise HTTPException(status_code=400, detail="לא ניתן לבצע פעולה זו")
+        
+    o.status = status_update.status
+    db.commit()
+    return {"message": "סטטוס ההזמנה עודכן בהצלחה", "new_status": o.status}

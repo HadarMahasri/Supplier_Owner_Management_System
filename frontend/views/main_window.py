@@ -10,6 +10,7 @@ from pathlib import Path
 from views.pages.login_page import LoginPage
 from views.pages.signup_page import SignUpPage
 from views.pages.supplier_home import SupplierHome
+from views.pages.store_owner_home import StoreOwnerHome  # ← הוספה חדשה
 
 
 class MainWindow(QMainWindow):
@@ -108,7 +109,7 @@ class MainWindow(QMainWindow):
         print(f"DEBUG - User data received: {user}")  # לדיבאג
         
         # תיקון הבעיה העיקרית: role במקום userType
-        if user.get("role") == "Supplier":  # ← תיקון כאן!
+        if user.get("role") == "Supplier":
             try:
                 supplier_page = SupplierHome(user)
                 supplier_page.logout_requested.connect(lambda: self._logout())
@@ -122,8 +123,24 @@ class MainWindow(QMainWindow):
                 print(f"ERROR loading supplier page: {e}")
                 self.statusBar().showMessage(f"שגיאה בטעינת עמוד ספק: {str(e)}", 10000)
 
-        elif user.get("role") == "StoreOwner":  # ← גם כאן תיקון
-            self.statusBar().showMessage("עמוד בעל חנות עדיין לא ממומש", 5000)
+        elif user.get("role") == "StoreOwner":  # ← הוספת הטיפול בבעל החנות
+            try:
+                store_owner_page = StoreOwnerHome(user)  # ← יצירת עמוד בעל החנות
+                store_owner_page.logout_requested.connect(lambda: self._logout())
+                
+                self.stack.addWidget(store_owner_page)
+                self.stack.setCurrentWidget(store_owner_page)
+                
+                print("SUCCESS - Store Owner page loaded successfully")
+                self.statusBar().showMessage(f"ברוך הבא {user.get('contact_name', 'בעל החנות')}", 5000)
+                
+            except Exception as e:
+                print(f"ERROR loading store owner page: {e}")
+                self.statusBar().showMessage(f"שגיאה בטעינת עמוד בעל החנות: {str(e)}", 10000)
+        
+        else:
+            print(f"WARNING - Unknown role: {user.get('role')}")
+            self.statusBar().showMessage(f"תפקיד לא מזוהה: {user.get('role')}", 5000)
 
     def _on_signup_ok(self, username: str, password: str):
         self.page_login.prefill(username, password)
@@ -132,5 +149,11 @@ class MainWindow(QMainWindow):
         
     def _logout(self):
         """פונקציה להתנתקות - חוזרת לעמוד ההתחברות"""
+        # ניקוי כל העמודים שנוספו מלבד login ו-signup
+        while self.stack.count() > 2:
+            widget = self.stack.widget(2)  # תמיד הווידג'ט השלישי
+            self.stack.removeWidget(widget)
+            widget.deleteLater()
+        
         self.stack.setCurrentWidget(self.page_login)
         self.statusBar().showMessage("התנתקת בהצלחה", 3000)

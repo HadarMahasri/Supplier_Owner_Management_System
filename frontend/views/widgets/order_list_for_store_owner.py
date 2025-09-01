@@ -1,8 +1,9 @@
-# frontend/views/widgets/order_list_for_supplier.py
+# frontend/views/widgets/order_list_for_store_owner.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
     QTableWidget, QTableWidgetItem, QHeaderView, QScrollArea,
-    QCheckBox, QDateEdit, QMessageBox, QSpacerItem, QSizePolicy, QFileDialog
+    QCheckBox, QDateEdit, QMessageBox, QSpacerItem, QSizePolicy, QFileDialog,
+    QLineEdit, QComboBox
 )
 from PySide6.QtCore import Qt, Signal, QDate, QThread
 from PySide6.QtGui import QFont
@@ -20,10 +21,10 @@ class OrdersFetchThread(QThread):
     orders_loaded = Signal(list)
     error_occurred = Signal(str)
     
-    def __init__(self, base_url: str, supplier_id: int):
+    def __init__(self, base_url: str, owner_id: int):
         super().__init__()
         self.base_url = base_url
-        self.supplier_id = supplier_id
+        self.owner_id = owner_id
     
     def run(self):
         try:
@@ -36,7 +37,7 @@ class OrdersFetchThread(QThread):
         """טעינת הזמנות מהשרת"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/v1/orders/supplier/{self.supplier_id}",
+                f"{self.base_url}/api/v1/orders/owner/{self.owner_id}",
                 timeout=15
             )
             if response.status_code == 200:
@@ -45,12 +46,12 @@ class OrdersFetchThread(QThread):
         except Exception:
             return []
     
-class OrdersForSupplier(QWidget):
-    """רכיב רשימת הזמנות לספק"""
+class OrdersForStoreOwner(QWidget):
+    """רכיב רשימת הזמנות לבעל חנות"""
     
-    def __init__(self, supplier_id: int = None):
+    def __init__(self, owner_id: int = None):
         super().__init__()
-        self.supplier_id = supplier_id
+        self.owner_id = owner_id
         self.base_url = os.getenv("API_BASE_URL", "http://localhost:8000")
         
         # מצב הרכיב
@@ -58,6 +59,7 @@ class OrdersForSupplier(QWidget):
         self.expanded_orders: Set[int] = set()
         self.display_history = False
         self.date_filter = {"from": None, "to": None}
+        self.supplier_filter = ""
         
         self.setup_ui()
         self.setup_styles()
@@ -70,7 +72,7 @@ class OrdersForSupplier(QWidget):
         main_layout.setSpacing(16)
         
         # כותרת
-        title = QLabel("רשימת הזמנות לספק")
+        title = QLabel("הזמנות שלי")
         title.setObjectName("ordersTitle")
         main_layout.addWidget(title)
         
@@ -146,6 +148,24 @@ class OrdersForSupplier(QWidget):
         filter_layout.addWidget(self.clear_filter_btn)
         
         layout.addWidget(filter_group)
+        
+        # פילטר ספקים (החדש!)
+        supplier_group = QFrame()
+        supplier_layout = QHBoxLayout(supplier_group)
+        supplier_layout.setContentsMargins(0, 0, 0, 0)
+        supplier_layout.setSpacing(8)
+        
+        supplier_label = QLabel("חיפוש לפי ספק:")
+        supplier_label.setObjectName("filterLabel")
+        self.supplier_search = QLineEdit()
+        self.supplier_search.setObjectName("supplierSearch")
+        self.supplier_search.setPlaceholderText("הכנס שם ספק...")
+        self.supplier_search.textChanged.connect(self.on_supplier_filter_changed)
+        
+        supplier_layout.addWidget(supplier_label)
+        supplier_layout.addWidget(self.supplier_search)
+        
+        layout.addWidget(supplier_group)
         layout.addStretch()
         
         # כפתורי פעולות
@@ -178,13 +198,13 @@ class OrdersForSupplier(QWidget):
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(0)
         
-        headers = ["מס' הזמנה", "תאריך", "שם חנות", "סכום ההזמנה", "סטטוס", "פעולה", ""]
-        widths = [150, 120, 180, 120, 100, 100, 30]
+        headers = ["מס' הזמנה", "תאריך", "ספק", "סכום הזמנה", "סטטוס", "פעולה", ""]
+        widths = [100, 100, 200, 120, 120, 180, 30]
         
         for i, (header_text, width) in enumerate(zip(headers, widths)):
             label = QLabel(header_text)
             label.setObjectName("headerLabel")
-            label.setAlignment(Qt.AlignLeft)
+            label.setAlignment(Qt.AlignCenter)
             label.setMinimumWidth(width)
             if i < len(headers) - 1:  # לא האחרון
                 label.setMaximumWidth(width)
@@ -197,35 +217,47 @@ class OrdersForSupplier(QWidget):
         QLabel#ordersTitle {
             font-size: 24px;
             font-weight: 700;
-            color: #065f46;
+            color: #1e40af;
             margin-bottom: 8px;
             padding: 12px;
-            background: #ecfdf5;
+            background: #eff6ff;
             border-radius: 8px;
         }
         
         QFrame#filterBar {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
             border-radius: 12px;
             margin-bottom: 8px;
         }
         
         QLabel#filterLabel {
             font-weight: 600;
-            color: #065f46;
+            color: #1e40af;
         }
         
         QDateEdit#dateInput {
             padding: 8px 12px;
-            border: 1px solid #bbf7d0;
+            border: 1px solid #93c5fd;
             border-radius: 8px;
             background: white;
             min-width: 130px;
             font-size: 14px;
         }
         QDateEdit#dateInput:focus {
-            border: 2px solid #10b981;
+            border: 2px solid #3b82f6;
+        }
+        
+        QLineEdit#supplierSearch {
+            padding: 8px 12px;
+            border: 1px solid #93c5fd;
+            border-radius: 8px;
+            background: white;
+            min-width: 200px;
+            font-size: 14px;
+        }
+        QLineEdit#supplierSearch:focus {
+            border: 2px solid #3b82f6;
         }
         
         QPushButton#clearFilterBtn {
@@ -238,11 +270,11 @@ class OrdersForSupplier(QWidget):
         }
         QPushButton#clearFilterBtn:hover {
             background: #f3f4f6;
-            border-color: #10b981;
+            border-color: #3b82f6;
         }
         
         QPushButton#exportBtn {
-            background: #10b981;
+            background: #3b82f6;
             color: white;
             border: none;
             border-radius: 10px;
@@ -251,11 +283,11 @@ class OrdersForSupplier(QWidget):
             font-size: 14px;
         }
         QPushButton#exportBtn:hover {
-            background: #059669;
+            background: #2563eb;
         }
         
         QPushButton#historyBtn {
-            background: #6366f1;
+            background: #8b5cf6;
             color: white;
             border: none;
             border-radius: 10px;
@@ -264,44 +296,40 @@ class OrdersForSupplier(QWidget):
             font-size: 14px;
         }
         QPushButton#historyBtn:hover {
-            background: #4f46e5;
+            background: #7c3aed;
         }
         
         /* כותרות הטבלה */
         QFrame#headerRow {
-            background: #d1fae5;
-            border: 1px solid #a7f3d0;
+            background: #bfdbfe;
+            border: 1px solid #93c5fd;
             border-radius: 12px 12px 0px 0px;
             margin-bottom: 0px;
         }
         
         QLabel#headerLabel {
             font-weight: 700;
-            color: #065f46;
+            color: #1e40af;
             padding: 12px 8px;
             font-size: 14px;
-             text-align: right;
-
         }
         
         /* שורות ההזמנות */
         QFrame#orderRow {
-            background: #f0fdf4;
-            border: 1px solid #bbf7d0;
+            background: #dbeafe;
+            border: 1px solid #93c5fd;
             border-top: none;
             margin: 0px;
         }
         QFrame#orderRow:hover {
-            background: #ecfdf5;
+            background: #eff6ff;
         }
         
         QLabel#orderCell {
             padding: 14px 8px;
-            color: #065f46;
+            color: #1e40af;
             font-size: 14px;
             font-weight: 500;
-            text-align: right;
-
         }
         
         /* כפתורי סטטוס */
@@ -319,7 +347,7 @@ class OrdersForSupplier(QWidget):
         }
         
         QPushButton#statusBtnActive {
-            background: #10b981;
+            background: #3b82f6;
             color: white;
             border: none;
             border-radius: 20px;
@@ -328,7 +356,7 @@ class OrdersForSupplier(QWidget):
             font-size: 12px;
         }
         QPushButton#statusBtnActive:hover {
-            background: #059669;
+            background: #2563eb;
         }
         
         QPushButton#statusBtnCompleted {
@@ -344,29 +372,29 @@ class OrdersForSupplier(QWidget):
         /* כפתור הרחבה */
         QPushButton#expandBtn {
             background: transparent;
-            border: 1px solid #bbf7d0;
+            border: 1px solid #93c5fd;
             border-radius: 6px;
             font-size: 14px;
             padding: 6px;
-            color: #059669;
+            color: #2563eb;
         }
         QPushButton#expandBtn:hover {
-            background: #ecfdf5;
-            border-color: #059669;
+            background: #eff6ff;
+            border-color: #2563eb;
         }
         
         /* פרטים מורחבים */
         QFrame#orderDetails {
             background: #f8fafc;
-            border: 1px solid #bbf7d0;
-            border-top: 1px solid #a7f3d0;
+            border: 1px solid #93c5fd;
+            border-top: 1px solid #60a5fa;
             padding: 20px;
             margin: 0px;
         }
         
         QLabel#detailLabel {
             font-weight: 700;
-            color: #065f46;
+            color: #1e40af;
             font-size: 14px;
             margin-bottom: 4px;
         }
@@ -392,8 +420,8 @@ class OrdersForSupplier(QWidget):
         }
         
         QTableWidget::item:selected {
-            background: #ecfdf5;
-            color: #065f46;
+            background: #eff6ff;
+            color: #1e40af;
         }
         
         QHeaderView::section {
@@ -423,11 +451,11 @@ class OrdersForSupplier(QWidget):
     
     def load_orders(self):
         """טעינת הזמנות"""
-        if not self.supplier_id:
+        if not self.owner_id:
             self._update_orders_display([])
             return
         
-        self.fetch_thread = OrdersFetchThread(self.base_url, self.supplier_id)
+        self.fetch_thread = OrdersFetchThread(self.base_url, self.owner_id)
         self.fetch_thread.orders_loaded.connect(self._on_orders_loaded)
         self.fetch_thread.error_occurred.connect(self._on_error)
         self.fetch_thread.start()
@@ -459,7 +487,7 @@ class OrdersForSupplier(QWidget):
         # צור הזמנות חדשות
         if not orders_list:
             no_orders_label = QLabel("לא נמצאו הזמנות בהתאם לסינון הנוכחי.")
-            no_orders_label.setAlignment(Qt.AlignLeft)
+            no_orders_label.setAlignment(Qt.AlignCenter)
             no_orders_label.setStyleSheet("color: #6b7280; padding: 32px; font-size: 16px;")
             self.orders_layout.addWidget(no_orders_label)
         else:
@@ -510,7 +538,7 @@ class OrdersForSupplier(QWidget):
         # מס' הזמנה
         id_label = QLabel(f"#{order_id}")
         id_label.setObjectName("orderCell")
-        id_label.setAlignment(Qt.AlignLeft)
+        id_label.setAlignment(Qt.AlignCenter)
         id_label.setMinimumWidth(100)
         id_label.setMaximumWidth(100)
         
@@ -527,22 +555,22 @@ class OrdersForSupplier(QWidget):
         
         date_label = QLabel(date_str)
         date_label.setObjectName("orderCell")
-        date_label.setAlignment(Qt.AlignLeft)
+        date_label.setAlignment(Qt.AlignCenter)
         date_label.setMinimumWidth(100)
         date_label.setMaximumWidth(100)
         
-        # שם חנות
-        store_name = order.get("owner_company", "חנויות מקורי בע\"מ")
-        store_label = QLabel(store_name)
-        store_label.setObjectName("orderCell")
-        store_label.setMinimumWidth(200)
-        store_label.setMaximumWidth(200)
+        # שם ספק (במקום שם חנות!)
+        supplier_name = order.get("owner_company", "ספק לא ידוע")
+        supplier_label = QLabel(supplier_name)
+        supplier_label.setObjectName("orderCell")
+        supplier_label.setMinimumWidth(200)
+        supplier_label.setMaximumWidth(200)
         
         # סכום
         total = order.get("total_amount", 0)
         amount_label = QLabel(f"₪ {total:,.2f}")
         amount_label.setObjectName("orderCell")
-        amount_label.setAlignment(Qt.AlignLeft)
+        amount_label.setAlignment(Qt.AlignRight)
         amount_label.setMinimumWidth(120)
         amount_label.setMaximumWidth(120)
         
@@ -566,7 +594,7 @@ class OrdersForSupplier(QWidget):
         # הוספה ללייאאוט
         layout.addWidget(id_label)
         layout.addWidget(date_label)
-        layout.addWidget(store_label)
+        layout.addWidget(supplier_label)
         layout.addWidget(amount_label)
         layout.addWidget(status_btn)
         layout.addWidget(action_btn)
@@ -575,20 +603,20 @@ class OrdersForSupplier(QWidget):
         return row
     
     def _create_status_button(self, order: Dict) -> QPushButton:
-        """יצירת כפתור סטטוס/פעולה"""
+        """יצירת כפתור סטטוס/פעולה לבעל חנות"""
         status = order.get("status", "בתהליך")
         order_id = order.get("id", 0)
         
         if status == "בוצעה":
-            btn = QPushButton("לאישור קבלת הזמנה")
+            btn = QPushButton("הזמנה בוצעה")
             btn.setObjectName("statusBtnPending")
-            btn.clicked.connect(lambda: self._update_order_status(order_id, "בתהליך"))
+            btn.setEnabled(False)  # בעל חנות לא יכול לשנות סטטוס "בוצעה"
         elif status == "בתהליך":
-            btn = QPushButton("ההזמנה אושרה")
+            btn = QPushButton("אישור הגעה")
             btn.setObjectName("statusBtnActive")
             btn.clicked.connect(lambda: self._update_order_status(order_id, "הושלמה"))
         else:  # "הושלמה"
-            btn = QPushButton("ההזמנה הושלמה")
+            btn = QPushButton("הזמנה הושלמה")
             btn.setObjectName("statusBtnCompleted")
             btn.setEnabled(False)
         
@@ -608,22 +636,22 @@ class OrdersForSupplier(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
         
-        # פרטי החנות ואיש קשר
+        # פרטי הספק ואיש קשר
         info_layout = QVBoxLayout()
         info_layout.setSpacing(8)
         
-        store_name = order.get("owner_company", "")
+        supplier_name = order.get("owner_company", "")
         contact_name = order.get("owner_name", "")
         phone = order.get("owner_phone", "")
         created_date = order.get("created_date", "")
         
-        if store_name:
-            store_label = QLabel("שם החנות:")
-            store_label.setObjectName("detailLabel")
-            store_value = QLabel(store_name)
-            store_value.setObjectName("detailValue")
-            info_layout.addWidget(store_label)
-            info_layout.addWidget(store_value)
+        if supplier_name:
+            supplier_label = QLabel("שם הספק:")
+            supplier_label.setObjectName("detailLabel")
+            supplier_value = QLabel(supplier_name)
+            supplier_value.setObjectName("detailValue")
+            info_layout.addWidget(supplier_label)
+            info_layout.addWidget(supplier_value)
         
         if contact_name:
             contact_label = QLabel("איש קשר:")
@@ -665,14 +693,15 @@ class OrdersForSupplier(QWidget):
             layout.addWidget(products_label)
             
             table = QTableWidget()
-            table.setColumnCount(3)
-            table.setHorizontalHeaderLabels(["מספר מוצר", "שם מוצר", "כמות"])
+            table.setColumnCount(4)
+            table.setHorizontalHeaderLabels(["מספר מוצר", "שם מוצר", "כמות", "מחיר יחידה"])
             table.setRowCount(len(items))
             
             for row, item in enumerate(items):
                 table.setItem(row, 0, QTableWidgetItem(str(item.get("product_id", ""))))
                 table.setItem(row, 1, QTableWidgetItem(item.get("product_name", "")))
                 table.setItem(row, 2, QTableWidgetItem(str(item.get("quantity", 0))))
+                table.setItem(row, 3, QTableWidgetItem(f"₪ {item.get('unit_price', 0):.2f}"))
             
             table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
             table.setMaximumHeight(300)
@@ -692,15 +721,12 @@ class OrdersForSupplier(QWidget):
         self._update_orders_display()
     
     def _update_order_status(self, order_id: int, new_status: str):
-        """עדכון סטטוס הזמנה בשרת"""
+        """עדכון סטטוס הזמנה בשרת - רק אישור הגעה לבעל חנות"""
         
         # הודעת אישור למשתמש
-        if new_status == "בתהליך":
-            message = f"האם לאשר קבלת הזמנה #{order_id}?"
-            success_msg = f"הזמנה #{order_id} אושרה בהצלחה!"
-        elif new_status == "הושלמה":
-            message = f"האם לסמן הזמנה #{order_id} כהושלמה?"
-            success_msg = f"הזמנה #{order_id} סומנה כהושלמה!"
+        if new_status == "הושלמה":
+            message = f"האם לאשר הגעת הזמנה #{order_id}?"
+            success_msg = f"הזמנה #{order_id} אושרה כהושלמה!"
         else:
             return
         
@@ -714,11 +740,11 @@ class OrdersForSupplier(QWidget):
             return
         
         try:
-            # שליחת בקשה לשרת
+            # שליחת בקשה לשרת - צריך לוודא שזה endpoint נכון לבעל חנות
             response = requests.put(
-                f"{self.base_url}/api/v1/orders/{order_id}/status",
+                f"{self.base_url}/api/v1/orders/{order_id}/status/owner",
                 json={"status": new_status},
-                params={"supplier_id": self.supplier_id},
+                params={"owner_id": self.owner_id},  # שים לב: owner_id ולא supplier_id
                 timeout=10
             )
             
@@ -777,6 +803,12 @@ class OrdersForSupplier(QWidget):
                     except:
                         continue
             
+            # סינון לפי ספק (החדש!)
+            if self.supplier_filter:
+                supplier_name = order.get("owner_company", "").lower()
+                if self.supplier_filter.lower() not in supplier_name:
+                    continue
+            
             filtered.append(order)
         
         return filtered
@@ -788,11 +820,18 @@ class OrdersForSupplier(QWidget):
         self.date_filter["to"] = self.date_to.date().toPython()
         self._update_orders_display()
     
+    def on_supplier_filter_changed(self):
+        """טיפול בשינוי פילטר ספקים"""
+        self.supplier_filter = self.supplier_search.text().strip()
+        self._update_orders_display()
+    
     def clear_date_filter(self):
         """ניקוי פילטר תאריכים"""
         self.date_from.setDate(QDate.currentDate().addDays(-30))
         self.date_to.setDate(QDate.currentDate())
         self.date_filter = {"from": None, "to": None}
+        self.supplier_search.clear()
+        self.supplier_filter = ""
         self._update_orders_display()
     
     def toggle_history_view(self):
@@ -800,14 +839,14 @@ class OrdersForSupplier(QWidget):
         self.display_history = not self.display_history
         
         if self.display_history:
-            self.history_btn.setText("לצפייה בהזמנות שטרם סופקו")
+            self.history_btn.setText("לצפייה בהזמנות שטרם הושלמו")
         else:
             self.history_btn.setText("לצפייה בהיסטוריית ההזמנות")
         
         self._update_orders_display()
     
     def export_to_excel(self):
-        """יצוא להזמנות לקובץ Excel (או CSV)"""
+        """יצוא הזמנות לקובץ Excel (או CSV)"""
         filtered_orders = self._get_filtered_orders()
 
         if not filtered_orders:
@@ -834,7 +873,7 @@ class OrdersForSupplier(QWidget):
                     'תאריך': date_str,
                     'סכום ההזמנה': order.get('total_amount', 0),
                     'סטטוס': order.get('status', ''),
-                    'שם החנות': order.get('owner_company', ''),
+                    'שם הספק': order.get('owner_company', ''),
                     'איש קשר': order.get('owner_name', ''),
                     'מספר מוצרים': len(order.get('items', [])),
                 }
@@ -845,7 +884,7 @@ class OrdersForSupplier(QWidget):
                     products_data.append({
                         'מספר הזמנה': order.get('id', ''),
                         'תאריך הזמנה': date_str,
-                        'שם החנות': order.get('owner_company', ''),
+                        'שם הספק': order.get('owner_company', ''),
                         'מספר מוצר': item.get('product_id', ''),
                         'שם מוצר': item.get('product_name', ''),
                         'כמות': item.get('quantity', 0),
@@ -855,7 +894,7 @@ class OrdersForSupplier(QWidget):
 
             # שם קובץ מוצע
             from datetime import date
-            suggested = f"הזמנות_ספק_{self.supplier_id or ''}_{date.today():%Y-%m-%d}_{'היסטוריה' if self.display_history else 'פעילות'}.xlsx"
+            suggested = f"הזמנות_בעל_חנות_{self.owner_id or ''}_{date.today():%Y-%m-%d}_{'היסטוריה' if self.display_history else 'פעילות'}.xlsx"
 
             # חלון בחירת קובץ
             path, _ = QFileDialog.getSaveFileName(
@@ -907,7 +946,7 @@ class OrdersForSupplier(QWidget):
         self.load_orders()
         QMessageBox.information(self, "רענון", "רשימת ההזמנות רועננה!")
     
-    def set_supplier_id(self, supplier_id: int):
-        """עדכון מזהה הספק"""
-        self.supplier_id = supplier_id
+    def set_owner_id(self, owner_id: int):
+        """עדכון מזהה בעל החנות"""
+        self.owner_id = owner_id
         self.load_orders()
