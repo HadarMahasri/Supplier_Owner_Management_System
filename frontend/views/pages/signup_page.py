@@ -13,8 +13,8 @@ class SignUpPage(QWidget):
     back_to_login = Signal()
     signup_success = Signal(str, str)  # username, password
 
-    def __init__(self):
-        super().__init__()
+    def _init_(self):
+        super()._init_()
         self.auth = AuthService()
         self._geo_ok, self.geo_tree = self._load_geo()
 

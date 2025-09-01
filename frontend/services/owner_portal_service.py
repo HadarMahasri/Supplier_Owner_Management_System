@@ -36,3 +36,21 @@ def request_link(owner_id: int, supplier_id: int):
 def create_order(owner_id: int, supplier_id: int):
     # TODO: כאשר יוגדר API להזמנות – לקרוא אליו כאן
     return {"ok": True}
+
+# --- Products & Orders for StoreOwner ---
+
+def products_by_supplier(supplier_id: int):
+    # התאימי לנתיב ה-API שלך (דוגמה נפוצה:)
+    return _get("/products/", {"supplier_id": supplier_id})
+
+def create_order(owner_id: int, supplier_id: int, items: list[dict]):
+    # התאימי לנתיב/פרמטרים המדויקים של ה-API שלך
+    import requests
+    r = requests.post(
+        _url("/orders/"),
+        params={"owner_id": owner_id},
+        json={"supplier_id": supplier_id, "items": items},
+        timeout=15
+    )
+    r.raise_for_status()
+    return r.json()

@@ -1,11 +1,11 @@
+# frontend/views/pages/order_create_page.py
 from PySide6.QtWidgets import (
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QScrollArea, QWidget, QLineEdit, QMessageBox, QFrame, QCheckBox
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
+    QScrollArea, QLineEdit, QMessageBox, QFrame, QCheckBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QPixmap, QIntValidator
 from typing import Optional
-# לא עובדים ישירות מול requests/API_BASE כאן
 from services import owner_portal_service as svc
 
 class SimpleQuantityInput(QWidget):
@@ -39,17 +39,18 @@ class SimpleQuantityInput(QWidget):
         try: return int(txt)
         except ValueError: return None
 
-class OrderCreateDialog(QDialog):
+class OrderCreatePage(QWidget):
+    canceled = Signal()        # חזרה אחורה
+    submitted = Signal()       # אחרי הצלחה (למשל: רענון דפי הזמנות/ספקים)
+
     def __init__(self, owner_id: int, supplier_id: int, parent=None):
         super().__init__(parent)
         self.owner_id = owner_id
         self.supplier_id = supplier_id
         self.products = []
         self.product_widgets = {}
-        self.setWindowTitle("ביצוע הזמנה")
-        self.resize(800, 700)
-        self.setLayoutDirection(Qt.RightToLeft)
 
+        self.setLayoutDirection(Qt.RightToLeft)
         layout = QVBoxLayout(self); layout.setContentsMargins(20,20,20,20); layout.setSpacing(16)
 
         title = QLabel("בחר מוצרים להזמנה", alignment=Qt.AlignCenter)
@@ -74,45 +75,66 @@ class OrderCreateDialog(QDialog):
         self.btn_submit = QPushButton("בצע הזמנה", objectName="submitBtn")
         btns.addWidget(self.btn_cancel); btns.addWidget(self.btn_submit); layout.addLayout(btns)
 
-        self.btn_cancel.clicked.connect(self.reject)
+        self.btn_cancel.clicked.connect(self.canceled.emit)
         self.btn_submit.clicked.connect(self._submit_order)
 
         self._setup_styles()
         self._load_products()
 
     def _setup_styles(self):
+        # צבעים מותאמים ל-StoreOwnerHome: כחולים וכפתורי primary/secondary תואמים
         self.setStyleSheet("""
-            QDialog { background:#f8fafc; }
+            QWidget { background:#fafafa; }  /* כמו דף הבית */
+
             QPushButton#submitBtn {
-                background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #10b981, stop:1 #059669);
-                color:white; border:none; border-radius:8px; padding:12px 24px; font-weight:bold; font-size:14px; min-width:120px;
+                background:#3b82f6;           /* primary כחול */
+                color:white; border:1px solid #2563eb;
+                border-radius:10px; padding:12px 24px;
+                font-weight:600; font-size:14px; min-width:120px;
             }
-            QPushButton#submitBtn:hover { background:qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #059669, stop:1 #047857); }
-            QPushButton#cancelBtn { background:#fff; color:#6b7280; border:2px solid #e5e7eb; border-radius:8px; padding:12px 24px; font-weight:bold; font-size:14px; min-width:120px; }
-            QPushButton#cancelBtn:hover { background:#f9fafb; border-color:#d1d5db; color:#374151; }
-            QWidget[objectName="ProductCard"] { background:#fff; border:2px solid #e5e7eb; border-radius:12px; padding:16px; }
+            QPushButton#submitBtn:hover { background:#2563eb; }
+            QPushButton#submitBtn:pressed { background:#1d4ed8; }
+
+            QPushButton#cancelBtn {
+                background:#fff; color:#374151; border:1px solid #d1d5db;
+                border-radius:10px; padding:12px 24px; font-weight:500; font-size:14px; min-width:120px;
+            }
+            QPushButton#cancelBtn:hover { background:#f9fafb; border-color:#3b82f6; color:#3b82f6; }
+
+            QWidget[objectName="ProductCard"] {
+                background:#fff; border:2px solid #e5e7eb; border-radius:12px; padding:16px;
+            }
             QWidget[objectName="ProductCard"]:hover { border-color:#cbd5e1; }
+
             QCheckBox { font-size:14px; font-weight:600; color:#374151; spacing:8px; }
-            QCheckBox::indicator { width:18px; height:18px; border:2px solid #d1d5db; border-radius:4px; background:#fff; }
-            QCheckBox::indicator:hover { border-color:#10b981; background:#f0fdf4; }
-            QCheckBox::indicator:checked { background:#10b981; border-color:#10b981; }
-            QLineEdit#modernQtyInput { background:#fff; border:2px solid #e5e7eb; border-radius:6px; padding:4px 6px; font-size:14px; font-weight:600; color:#1f2937; }
+            QCheckBox::indicator {
+                width:18px; height:18px; border:2px solid #d1d5db; border-radius:4px; background:#fff;
+            }
+            QCheckBox::indicator:hover { border-color:#3b82f6; background:#eff6ff; }
+            QCheckBox::indicator:checked { background:#3b82f6; border-color:#3b82f6; }
+
+            QLineEdit#modernQtyInput {
+                background:#fff; border:2px solid #e5e7eb; border-radius:6px;
+                padding:4px 6px; font-size:14px; font-weight:600; color:#1f2937;
+            }
             QLineEdit#modernQtyInput:read-only { background:#f9fafb; color:#9ca3af; }
-            QLineEdit#modernQtyInput:focus { border-color:#059669; background:#f0fdf4; }
+            QLineEdit#modernQtyInput:focus { border-color:#2563eb; background:#eff6ff; }
+
             QFrame#summaryFrame { background:#fff; border:2px solid #e5e7eb; border-radius:10px; padding:12px; }
             QLabel#summaryMain { font-size:16px; font-weight:bold; color:#1f2937; }
             QLabel#summaryDetails { font-size:13px; color:#6b7280; }
         """)
+
 
     def _load_products(self):
         try:
             self.products = svc.products_by_supplier(self.supplier_id)
             if not self.products:
                 QMessageBox.information(self, "מידע", "לא נמצאו מוצרים עבור ספק זה")
-                self.reject(); return
+                self.canceled.emit(); return
         except Exception as e:
             QMessageBox.critical(self, "שגיאה", f"שגיאה בטעינת מוצרים: {e}")
-            self.reject(); return
+            self.canceled.emit(); return
 
         for p in self.products:
             self._add_product_card(p)
@@ -137,13 +159,14 @@ class OrderCreateDialog(QDialog):
                 data = requests.get(product["image_url"], timeout=5).content
                 pixmap = QPixmap(); pixmap.loadFromData(data)
                 img_label.setPixmap(pixmap.scaled(80, 80, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-            except:  # עשוי להיכשל, לא קריטי להצגה
+            except:
                 pass
 
         info_layout = QVBoxLayout()
         name_label = QLabel(product.get("name", "שם לא זמין"))
         name_label.setStyleSheet("font-size:18px; font-weight:bold; color:#1f2937;")
-        price_label = QLabel(f"{price:.2f} ₪"); price_label.setStyleSheet("font-size:16px; font-weight:bold; color:#10b981;")
+        price_label = QLabel(f"{price:.2f} ₪")
+        price_label.setStyleSheet("font-size:16px; font-weight:bold; color:#3b82f6;")
         details_label = QLabel(f"מלאי: {stock} יח׳ • מינימום: {min_qty} יח׳"); details_label.setStyleSheet("font-size:12px; color:#6b7280;")
         info_layout.addWidget(name_label); info_layout.addWidget(price_label); info_layout.addWidget(details_label); info_layout.addStretch()
         top_row.addWidget(img_label); top_row.addLayout(info_layout, 1)
@@ -204,17 +227,16 @@ class OrderCreateDialog(QDialog):
         if not items:
             QMessageBox.warning(self, "שגיאה", "אנא בחר לפחות מוצר אחד להזמנה"); return
 
-        from PySide6.QtWidgets import QMessageBox as _QMB
         total_items = sum(i["quantity"] for i in items)
-        if _QMB.question(self, "אישור הזמנה", f"האם אתה בטוח שברצונך להזמין {total_items} פריטים?",
-                         _QMB.Yes | _QMB.No, _QMB.No) != _QMB.Yes:
+        if QMessageBox.question(self, "אישור הזמנה",
+                                f"האם אתה בטוח שברצונך להזמין {total_items} פריטים?",
+                                QMessageBox.Yes | QMessageBox.No, QMessageBox.No) != QMessageBox.Yes:
             return
-
         try:
             self.btn_submit.setEnabled(False); self.btn_submit.setText("שולח...")
             svc.create_order(self.owner_id, self.supplier_id, items)
             QMessageBox.information(self, "הצלחה", "ההזמנה נשלחה בהצלחה!")
-            self.accept()
+            self.submitted.emit()
         except Exception as e:
             QMessageBox.critical(self, "שגיאה", f"נכשל ביצוע ההזמנה: {e}")
             self.btn_submit.setEnabled(True); self.btn_submit.setText("בצע הזמנה")

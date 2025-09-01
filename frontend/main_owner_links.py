@@ -2,7 +2,7 @@ from PySide6.QtWidgets import QApplication
 import sys
 
 # ייבוא העמוד שבנית
-from frontend.views.pages.owner_links_page import OwnerLinksPage
+from views.pages.owner_links_page import OwnerLinksPage
 
 def main():
     app = QApplication(sys.argv)
