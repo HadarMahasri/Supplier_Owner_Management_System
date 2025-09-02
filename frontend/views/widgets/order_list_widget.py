@@ -38,18 +38,18 @@ class OrderRowWidget(QFrame):
         expand_btn = QPushButton("🔽" if not self.is_expanded else "🔼")
         expand_btn.setObjectName("expandBtn")
         expand_btn.setFixedSize(30, 30)
-        expand_btn.clicked.connect(lambda: self.expand_requested.emit(self.order_id))
+        expand_btn.clicked.connect(lambda _=False, oid=self.order_id: self.expand_requested.emit(oid))
         
         # פעולה (ריק כרגע)
         action_btn = QPushButton("")
-        action_btn.setVisible(False)
-        action_btn.setMinimumWidth(180)
-        action_btn.setMaximumWidth(180)
+        action_widget = self.create_action_widget()
+        action_widget.setMinimumWidth(180)
+        action_widget.setMaximumWidth(180)
         
         # סטטוס כפתור
-        status_btn = self.create_status_button()
-        status_btn.setMinimumWidth(120)
-        status_btn.setMaximumWidth(120)
+        status_label = self.create_status_label()
+        status_label.setMinimumWidth(120)
+        status_label.setMaximumWidth(120)
         
         # סכום
         total = self.order.get("total_amount", 0)
@@ -84,15 +84,51 @@ class OrderRowWidget(QFrame):
         
         # הוספה ללייאאוט מימין לשמאל
         layout.addWidget(expand_btn)
-        layout.addWidget(action_btn)
-        layout.addWidget(status_btn)
+        layout.addWidget(action_widget)   # היה action_btn נסתר – עכשיו בשימוש
+        layout.addWidget(status_label)    # במקום status_btn שהיה כפתור
         layout.addWidget(amount_label)
         layout.addWidget(store_label)
         layout.addWidget(date_label)
         layout.addWidget(id_label)
     
-    def create_status_button(self) -> QPushButton:
-        """Create status button based on order status"""
+    def create_status_label(self) -> QLabel:
+        """סטטוס כתצוגת טקסט בלבד"""
+        status = self.order.get("status", "בתהליך")
+        label = QLabel(status)
+        label.setObjectName("orderCell")
+        label.setAlignment(Qt.AlignCenter)
+        return label
+
+    def create_action_widget(self) -> QWidget:
+        """
+        עמודת פעולה:
+        - 'בוצעה'   -> כפתור 'לאישור קבלת ההזמנה' (מעביר ל'בתהליך')
+        - 'בתהליך' -> טקסט 'ממתין לאישור בעל החנות'
+        - 'הושלמה' -> טקסט 'ההזמנה הושלמה'
+        """
+        status = self.order.get("status", "בתהליך")
+
+        if status == "בוצעה":
+            btn = QPushButton("לאישור קבלת ההזמנה")
+            btn.setObjectName("statusBtnPending")  # שימוש בסטייל הקיים
+            btn.clicked.connect(lambda _=False: self.status_update_requested.emit(self.order_id, "בתהליך"))
+            return btn
+
+        elif status == "בתהליך":
+            lbl = QLabel("ממתין לאישור בעל החנות")
+            lbl.setObjectName("orderCell")
+            lbl.setAlignment(Qt.AlignCenter)
+            return lbl
+
+        else:  # "הושלמה"
+            lbl = QLabel("ההזמנה הושלמה")
+            lbl.setObjectName("orderCell")
+            lbl.setAlignment(Qt.AlignCenter)
+            return lbl
+
+
+    """def create_status_button(self) -> QPushButton:
+        Create status button based on order status
         status = self.order.get("status", "בתהליך")
         
         if status == "בוצעה":
@@ -108,7 +144,7 @@ class OrderRowWidget(QFrame):
             btn.setObjectName("statusBtnCompleted")
             btn.setEnabled(False)
         
-        return btn
+        return btn"""
     
     def format_date(self, date_str: str) -> str:
         """Format date string for display"""

@@ -575,33 +575,65 @@ class OrdersForStoreOwner(QWidget):
         amount_label.setMaximumWidth(120)
         
         # סטטוס כפתור
-        status = order.get("status", "בתהליך")
-        status_btn = self._create_status_button(order)
-        status_btn.setMinimumWidth(120)
-        status_btn.setMaximumWidth(120)
+        #status = order.get("status", "בתהליך")
+        status_label = self._create_status_label(order)
+        status_label.setMinimumWidth(120)
+        status_label.setMaximumWidth(120)
         
         # פעולה
-        action_btn = self._create_action_button(order)
-        action_btn.setMinimumWidth(180)
-        action_btn.setMaximumWidth(180)
+        action_widget = self._create_action_widget(order)
+        action_widget.setMinimumWidth(180)
+        action_widget.setMaximumWidth(180)
         
         # כפתור הרחבה
         expand_btn = QPushButton("🔽" if order_id not in self.expanded_orders else "🔼")
         expand_btn.setObjectName("expandBtn")
         expand_btn.setFixedSize(30, 30)
-        expand_btn.clicked.connect(lambda: self._toggle_expand(order_id))
+        expand_btn.clicked.connect(lambda _=False, oid=order_id: self._toggle_expand(oid))
         
         # הוספה ללייאאוט
         layout.addWidget(id_label)
         layout.addWidget(date_label)
         layout.addWidget(supplier_label)
         layout.addWidget(amount_label)
-        layout.addWidget(status_btn)
-        layout.addWidget(action_btn)
+        layout.addWidget(status_label)   # במקום status_btn
+        layout.addWidget(action_widget)  # במקום action_btn הישן שהיה מוסתר
         layout.addWidget(expand_btn)
+
         
         return row
     
+    def _create_status_label(self, order: Dict) -> QLabel:
+        status = order.get("status", "בתהליך")
+        lbl = QLabel(status)
+        lbl.setObjectName("orderCell")
+        lbl.setAlignment(Qt.AlignCenter)
+        return lbl
+
+    def _create_action_widget(self, order: Dict) -> QWidget:
+        status = order.get("status", "בתהליך")
+        order_id = order.get("id", 0)
+
+        if status == "בוצעה":
+            # בעל החנות ממתין לאישור הספק
+            lbl = QLabel("ממתין לאישור ספק")
+            lbl.setObjectName("orderCell")
+            lbl.setAlignment(Qt.AlignCenter)
+            return lbl
+
+        elif status == "בתהליך":
+            # בעל החנות מאשר הגעה -> משנה ל"הושלמה"
+            btn = QPushButton("אשר הגעת הזמנה")
+            btn.setObjectName("statusBtnActive")  # סטייל קיים
+            btn.clicked.connect(lambda _=False, oid=order_id: self._update_order_status(oid, "הושלמה"))
+            return btn
+
+        else:  # "הושלמה"
+            lbl = QLabel("הזמנה הושלמה")
+            lbl.setObjectName("orderCell")
+            lbl.setAlignment(Qt.AlignCenter)
+            return lbl
+
     def _create_status_button(self, order: Dict) -> QPushButton:
         """יצירת כפתור סטטוס/פעולה לבעל חנות"""
         status = order.get("status", "בתהליך")

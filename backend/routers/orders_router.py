@@ -83,7 +83,7 @@ def create_order(order: OrderCreate, owner_id: int, db: Session = Depends(get_db
     if not supplier:
         raise HTTPException(status_code=404, detail="ספק לא נמצא")
 
-    o = Order(owner_id=owner_id, supplier_id=order.supplier_id, status="בתהליך")
+    o = Order(owner_id=owner_id, supplier_id=order.supplier_id, status="בוצעה")
     db.add(o)
     db.flush()
 
