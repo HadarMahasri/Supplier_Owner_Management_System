@@ -9,6 +9,7 @@ from database.session import engine
 # ראוטרים (users חובה; אחרים אופציונליים)
 from routers.users_router import router as users_router
 from routers.owner_links_router import router as owner_links_router
+from routers.ai_router import router as ai_router
 
 # ראוטרים נוספים
 import traceback
@@ -123,7 +124,8 @@ def create_app() -> FastAPI:
         app.include_router(gateway_router, prefix="/api/v1")
 
    
-         
+    app.include_router(ai_router, prefix="/api/v1")
+
 
 
 
@@ -131,6 +133,8 @@ def create_app() -> FastAPI:
 
 
 app = create_app()
+
+
 
 if __name__ == "__main__":
     import uvicorn
