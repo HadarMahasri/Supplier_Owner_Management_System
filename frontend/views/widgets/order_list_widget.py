@@ -27,68 +27,67 @@ class OrderRowWidget(QFrame):
         self.setup_ui()
     
     def setup_ui(self):
-        """Build the order row UI"""
+        """Build the order row UI with RTL layout and perfect synchronization"""
         self.setObjectName("orderRow")
+        self.setLayoutDirection(Qt.RightToLeft)  # כיוון מימין לשמאל
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(0)
+        layout.setDirection(QHBoxLayout.RightToLeft)  # סידור מימין לשמאל
         
-        # כפתור הרחבה - מימין
+        # כפתור הרחבה - מימין ביותר (40px)
         expand_btn = QPushButton("🔽" if not self.is_expanded else "🔼")
         expand_btn.setObjectName("expandBtn")
-        expand_btn.setFixedSize(30, 30)
+        expand_btn.setFixedSize(40, 30)
         expand_btn.clicked.connect(lambda _=False, oid=self.order_id: self.expand_requested.emit(oid))
+        layout.addWidget(expand_btn)
         
-        # פעולה (ריק כרגע)
-        action_btn = QPushButton("")
+        # פעולה (180px)
         action_widget = self.create_action_widget()
         action_widget.setMinimumWidth(180)
         action_widget.setMaximumWidth(180)
+        layout.addWidget(action_widget)
         
-        # סטטוס כפתור
+        # סטטוס (120px)
         status_label = self.create_status_label()
         status_label.setMinimumWidth(120)
         status_label.setMaximumWidth(120)
+        layout.addWidget(status_label)
         
-        # סכום
+        # סכום הזמנה (140px)
         total = self.order.get("total_amount", 0)
         amount_label = QLabel(f"₪ {total:,.2f}")
         amount_label.setObjectName("orderCell")
         amount_label.setAlignment(Qt.AlignCenter)
-        amount_label.setMinimumWidth(120)
-        amount_label.setMaximumWidth(120)
+        amount_label.setMinimumWidth(140)
+        amount_label.setMaximumWidth(140)
+        layout.addWidget(amount_label)
         
-        # שם חנות
+        # שם חנות (200px) - יישור לימין לעברית
         store_name = self.order.get("owner_company", "חנויות מקורי בע\"מ")
         store_label = QLabel(store_name)
         store_label.setObjectName("orderCell")
-        store_label.setAlignment(Qt.AlignCenter)
+        store_label.setAlignment(Qt.AlignRight)  # יישור לימין לעברית
         store_label.setMinimumWidth(200)
         store_label.setMaximumWidth(200)
+        layout.addWidget(store_label)
         
-        # תאריך
+        # תאריך (120px)
         date_str = self.format_date(self.order.get("created_date", ""))
         date_label = QLabel(date_str)
         date_label.setObjectName("orderCell")
         date_label.setAlignment(Qt.AlignCenter)
-        date_label.setMinimumWidth(100)
-        date_label.setMaximumWidth(100)
+        date_label.setMinimumWidth(120)
+        date_label.setMaximumWidth(120)
+        layout.addWidget(date_label)
         
-        # מס' הזמנה - משמאל
+        # מס' הזמנה - שמאל ביותר (100px)
         id_label = QLabel(f"#{self.order_id}")
         id_label.setObjectName("orderCell")
         id_label.setAlignment(Qt.AlignCenter)
         id_label.setMinimumWidth(100)
         id_label.setMaximumWidth(100)
-        
-        # הוספה ללייאאוט מימין לשמאל
-        layout.addWidget(expand_btn)
-        layout.addWidget(action_widget)   # היה action_btn נסתר – עכשיו בשימוש
-        layout.addWidget(status_label)    # במקום status_btn שהיה כפתור
-        layout.addWidget(amount_label)
-        layout.addWidget(store_label)
-        layout.addWidget(date_label)
         layout.addWidget(id_label)
     
     def create_status_label(self) -> QLabel:
@@ -101,7 +100,7 @@ class OrderRowWidget(QFrame):
 
     def create_action_widget(self) -> QWidget:
         """
-        עמודת פעולה:
+        עמודת פעולה עבור ספק:
         - 'בוצעה'   -> כפתור 'לאישור קבלת ההזמנה' (מעביר ל'בתהליך')
         - 'בתהליך' -> טקסט 'ממתין לאישור בעל החנות'
         - 'הושלמה' -> טקסט 'ההזמנה הושלמה'
@@ -110,7 +109,7 @@ class OrderRowWidget(QFrame):
 
         if status == "בוצעה":
             btn = QPushButton("לאישור קבלת ההזמנה")
-            btn.setObjectName("statusBtnPending")  # שימוש בסטייל הקיים
+            btn.setObjectName("statusBtnPending")
             btn.clicked.connect(lambda _=False: self.status_update_requested.emit(self.order_id, "בתהליך"))
             return btn
 
@@ -125,26 +124,6 @@ class OrderRowWidget(QFrame):
             lbl.setObjectName("orderCell")
             lbl.setAlignment(Qt.AlignCenter)
             return lbl
-
-
-    """def create_status_button(self) -> QPushButton:
-        Create status button based on order status
-        status = self.order.get("status", "בתהליך")
-        
-        if status == "בוצעה":
-            btn = QPushButton("לאישור קבלת הזמנה")
-            btn.setObjectName("statusBtnPending")
-            btn.clicked.connect(lambda: self.status_update_requested.emit(self.order_id, "בתהליך"))
-        elif status == "בתהליך":
-            btn = QPushButton("ההזמנה אושרה")
-            btn.setObjectName("statusBtnActive")
-            btn.clicked.connect(lambda: self.status_update_requested.emit(self.order_id, "הושלמה"))
-        else:  # "הושלמה"
-            btn = QPushButton("ההזמנה הושלמה")
-            btn.setObjectName("statusBtnCompleted")
-            btn.setEnabled(False)
-        
-        return btn"""
     
     def format_date(self, date_str: str) -> str:
         """Format date string for display"""
@@ -215,18 +194,19 @@ class OrderDetailsWidget(QFrame):
             layout.addWidget(value_label)
     
     def create_products_table(self, items: list) -> QTableWidget:
-        """Create products table"""
+        """Create products table with RTL headers"""
         table = QTableWidget()
-        table.setColumnCount(3)
-        table.setHorizontalHeaderLabels(["כמות", "שם מוצר", "מספר מוצר"])
+        table.setColumnCount(4)
+        table.setHorizontalHeaderLabels(["מחיר יחידה", "כמות", "שם מוצר", "מספר מוצר"])
         table.setRowCount(len(items))
         
         for row, item in enumerate(items):
-            table.setItem(row, 0, QTableWidgetItem(str(item.get("quantity", 0))))
-            table.setItem(row, 1, QTableWidgetItem(item.get("product_name", "")))
-            table.setItem(row, 2, QTableWidgetItem(str(item.get("product_id", ""))))
+            table.setItem(row, 0, QTableWidgetItem(f"₪ {item.get('unit_price', 0):.2f}"))
+            table.setItem(row, 1, QTableWidgetItem(str(item.get("quantity", 0))))
+            table.setItem(row, 2, QTableWidgetItem(item.get("product_name", "")))
+            table.setItem(row, 3, QTableWidgetItem(str(item.get("product_id", ""))))
         
-        table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
         table.setMaximumHeight(300)
         table.setAlternatingRowColors(True)
         
@@ -234,29 +214,173 @@ class OrderDetailsWidget(QFrame):
 
 
 class OrdersHeaderWidget(QFrame):
-    """Widget for orders table header"""
+    """Widget for orders table header with RTL layout"""
     
     def __init__(self):
         super().__init__()
         self.setup_ui()
     
     def setup_ui(self):
-        """Build the header UI"""
+        """Build the header UI with perfect synchronization"""
         self.setObjectName("headerRow")
+        self.setLayoutDirection(Qt.RightToLeft)  # כיוון מימין לשמאל
         
         layout = QHBoxLayout(self)
         layout.setContentsMargins(16, 12, 16, 12)
         layout.setSpacing(0)
+        layout.setDirection(QHBoxLayout.RightToLeft)  # סידור מימין לשמאל
         
-        # הכותרות מסודרות מימין לשמאל
-        headers = ["", "פעולה", "סטטוס", "סכום ההזמנה", "שם חנות", "תאריך", "מס' הזמנה"]
-        widths = [30, 180, 120, 120, 200, 100, 100]
+        # הכותרות מסודרות מימין לשמאל - תואמות בדיוק לשורות
+        headers = ["", "פעולה", "סטטוס", "סכום הזמנה", "שם חנות", "תאריך", "מס' הזמנה"]
+        widths = [40, 180, 120, 140, 200, 120, 100]
+        alignments = [Qt.AlignCenter, Qt.AlignCenter, Qt.AlignCenter, 
+                     Qt.AlignCenter, Qt.AlignRight, Qt.AlignCenter, Qt.AlignCenter]
         
-        for header_text, width in zip(headers, widths):
+        for header_text, width, alignment in zip(headers, widths, alignments):
             label = QLabel(header_text)
             label.setObjectName("headerLabel")
-            label.setAlignment(Qt.AlignCenter)
+            label.setAlignment(alignment)
             label.setMinimumWidth(width)
-            if header_text != "":  # לא האחרון
-                label.setMaximumWidth(width)
+            label.setMaximumWidth(width)
             layout.addWidget(label)
+
+
+# הוספת סגנונות משופרים לטבלה מסונכרנת
+ORDERS_TABLE_STYLES = """
+/* כותרות הטבלה */
+QFrame#headerRow {
+    background: #bfdbfe;
+    border: 1px solid #93c5fd;
+    border-radius: 12px 12px 0px 0px;
+    margin-bottom: 0px;
+}
+
+QLabel#headerLabel {
+    font-weight: 700;
+    color: #1e40af;
+    padding: 12px 4px;
+    font-size: 14px;
+    border-right: 1px solid rgba(147, 197, 253, 0.3);
+}
+
+QLabel#headerLabel:first-child {
+    border-right: none;
+}
+
+/* שורות ההזמנות - טבלה מסונכרנת */
+QFrame#orderRow {
+    background: #dbeafe;
+    border: 1px solid #93c5fd;
+    border-top: none;
+    margin: 0px;
+    min-height: 60px;
+}
+QFrame#orderRow:hover {
+    background: #eff6ff;
+}
+
+QLabel#orderCell {
+    padding: 14px 4px;
+    color: #1e40af;
+    font-size: 14px;
+    font-weight: 500;
+    border-right: 1px solid rgba(147, 197, 253, 0.3);
+}
+
+QLabel#orderCell:first-child {
+    border-right: none;
+}
+
+/* כפתורי פעולה בתוך הטבלה */
+QPushButton#statusBtnPending {
+    background: #f59e0b;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 12px;
+    margin: 4px;
+}
+QPushButton#statusBtnPending:hover {
+    background: #d97706;
+}
+
+QPushButton#statusBtnActive {
+    background: #3b82f6;
+    color: white;
+    border: none;
+    border-radius: 20px;
+    padding: 8px 16px;
+    font-weight: 600;
+    font-size: 12px;
+    margin: 4px;
+}
+QPushButton#statusBtnActive:hover {
+    background: #2563eb;
+}
+
+/* כפתור הרחבה בטבלה */
+QPushButton#expandBtn {
+    background: transparent;
+    border: 1px solid #93c5fd;
+    border-radius: 6px;
+    font-size: 14px;
+    padding: 4px;
+    color: #2563eb;
+    margin: 2px;
+}
+QPushButton#expandBtn:hover {
+    background: #eff6ff;
+    border-color: #2563eb;
+}
+
+/* פרטים מורחבים */
+QFrame#orderDetails {
+    background: #f8fafc;
+    border: 1px solid #93c5fd;
+    border-top: 1px solid #60a5fa;
+    padding: 20px;
+    margin: 0px;
+}
+
+QLabel#detailLabel {
+    font-weight: 700;
+    color: #1e40af;
+    font-size: 14px;
+    margin-bottom: 4px;
+}
+
+QLabel#detailValue {
+    color: #374151;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+
+/* טבלת מוצרים בפרטים */
+QTableWidget {
+    background: white;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    gridline-color: #e5e7eb;
+    font-size: 13px;
+}
+
+QTableWidget::item {
+    padding: 8px;
+    border-bottom: 1px solid #f3f4f6;
+}
+
+QTableWidget::item:selected {
+    background: #eff6ff;
+    color: #1e40af;
+}
+
+QHeaderView::section {
+    background: #f9fafb;
+    color: #374151;
+    padding: 10px;
+    border: 1px solid #e5e7eb;
+    font-weight: 600;
+}
+"""

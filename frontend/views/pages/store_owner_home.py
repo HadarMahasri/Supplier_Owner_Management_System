@@ -7,7 +7,8 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QColor
 from typing import Dict
 
-from views.widgets.order_list_for_store_owner import OrdersForStoreOwner
+# שימוש ב-widget החדש במקום הישן
+from views.widgets.store_owner_orders_widget import StoreOwnerOrdersWidget
 from views.widgets.side_menu_store_owner import SideMenu
 from views.pages.owner_links_page import OwnerLinksPage
 from views.pages.order_create_page import OrderCreatePage
@@ -42,13 +43,15 @@ class StoreOwnerHome(QWidget):
         self.content_stack = QStackedWidget()
         self.content_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
-        # index 0: Orders
+        # index 0: Orders - שימוש ב-widget החדש
         orders_page = QWidget()
         orders_layout = QVBoxLayout(orders_page)
         orders_layout.setContentsMargins(16, 16, 16, 16)
         orders_layout.setSpacing(20)
         owner_id = self.user_data.get('id')
-        self.orders_widget = OrdersForStoreOwner(owner_id)
+        
+        # שימוש ב-widget החדש
+        self.orders_widget = StoreOwnerOrdersWidget(owner_id)
         self.orders_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         orders_layout.addWidget(self.orders_widget, 1)
         self.content_stack.addWidget(orders_page)
@@ -87,35 +90,45 @@ class StoreOwnerHome(QWidget):
         layout.setContentsMargins(12, 10, 12, 10)
         layout.setSpacing(12)
 
+        # Actions - צד שמאל (הכפתורים בסדר: התנתק, רשימת הזמנות, הזמנה חדשה)
+        actions_layout = QHBoxLayout()
+        actions_layout.setSpacing(8)
+        
+        logout_btn = QPushButton("התנתק")
+        logout_btn.setObjectName("ghostBtn")
+        logout_btn.clicked.connect(self.logout_requested.emit)
+        
+        orders_btn = QPushButton("רשימת הזמנות")
+        orders_btn.setObjectName("secondaryBtn")
+        orders_btn.clicked.connect(self.show_orders_page)
+        
+        new_order_btn = QPushButton("הזמנה חדשה")
+        new_order_btn.setObjectName("primaryBtn")
+        new_order_btn.clicked.connect(self.show_suppliers_page)
+
+        # סדר חדש: התנתק הכי שמאלי
+        actions_layout.addWidget(logout_btn)
+        actions_layout.addWidget(orders_btn)
+        actions_layout.addWidget(new_order_btn)
+
+        # Title - במרכז
+        company_name = self.user_data.get('company_name', '')
+        title_text = "ממשק בעל חנות" + (f" - {company_name}" if company_name else "")
+        title = QLabel(title_text)
+        title.setObjectName("title")
+        title.setAlignment(Qt.AlignCenter)
+
+        # Menu button - צד ימין
         menu_btn = QPushButton("☰")
         menu_btn.setObjectName("menuBtn")
         menu_btn.setFixedSize(40, 40)
         menu_btn.clicked.connect(self.toggle_side_menu)
 
-        company_name = self.user_data.get('company_name', '')
-        title_text = "ממשק בעל חנות" + (f" - {company_name}" if company_name else "")
-        title = QLabel(title_text)
-        title.setObjectName("title")
-
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(8)
-        orders_btn = QPushButton("רשימת הזמנות")
-        orders_btn.setObjectName("secondaryBtn")
-        orders_btn.clicked.connect(self.show_orders_page)
-        new_order_btn = QPushButton("הזמנה חדשה")
-        new_order_btn.setObjectName("primaryBtn")
-        new_order_btn.clicked.connect(self.show_suppliers_page)
-        logout_btn = QPushButton("התנתק")
-        logout_btn.setObjectName("ghostBtn")
-        logout_btn.clicked.connect(self.logout_requested.emit)
-
-        actions_layout.addWidget(orders_btn)
-        actions_layout.addWidget(new_order_btn)
-        actions_layout.addWidget(logout_btn)
-
-        layout.addWidget(menu_btn)
-        layout.addWidget(title, 1)
-        layout.addLayout(actions_layout)
+        # סידור כללי בלייאוט הראשי - מימין לשמאל
+        layout.addWidget(menu_btn)         # ימין
+        layout.addWidget(title, 1)         # מרכז עם stretch
+        layout.addLayout(actions_layout)   # שמאל
+        
         return topbar
 
     def setup_styles(self):
@@ -147,7 +160,7 @@ class StoreOwnerHome(QWidget):
             QPushButton#ghostBtn:hover { background:#f6f7f9; border-color:#d1d5db; }
         """)
 
-    # ===== ניווט להזמנת ספק (inline) =====
+    # ===== ניווט לבצוע הזמנת ספק (inline) =====
     def open_order_inline(self, supplier_id: int):
         owner_id = self.user_data.get('id', 1)
         order_page = OrderCreatePage(owner_id, supplier_id, self)
@@ -227,9 +240,13 @@ class StoreOwnerHome(QWidget):
     def show_management(self): self.show_new_order_page()
     def refresh_all_data(self):
         if hasattr(self, 'orders_widget'):
-            try: self.orders_widget.refresh_orders()
-            except: pass
+            try: 
+                self.orders_widget.refresh_orders()
+            except: 
+                pass
         current_widget = self.content_stack.currentWidget()
-        if hasattr(current_widget, 'reload_from_server'): current_widget.reload_from_server()
-        elif hasattr(current_widget, 'refresh'): current_widget.refresh()
+        if hasattr(current_widget, 'reload_from_server'): 
+            current_widget.reload_from_server()
+        elif hasattr(current_widget, 'refresh'): 
+            current_widget.refresh()
         QMessageBox.information(self, "רענון", "כל הנתונים רוענו בהצלחה!")

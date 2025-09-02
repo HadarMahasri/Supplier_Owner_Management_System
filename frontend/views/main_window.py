@@ -10,7 +10,8 @@ from pathlib import Path
 from views.pages.login_page import LoginPage
 from views.pages.signup_page import SignUpPage
 from views.pages.supplier_home import SupplierHome
-from views.pages.store_owner_home import StoreOwnerHome  # ← הוספה חדשה
+# שינוי - ייבוא מהקובץ המעודכן
+from views.pages.store_owner_home import StoreOwnerHome
 
 
 class MainWindow(QMainWindow):
@@ -123,9 +124,9 @@ class MainWindow(QMainWindow):
                 print(f"ERROR loading supplier page: {e}")
                 self.statusBar().showMessage(f"שגיאה בטעינת עמוד ספק: {str(e)}", 10000)
 
-        elif user.get("role") == "StoreOwner":  # ← הוספת הטיפול בבעל החנות
+        elif user.get("role") == "StoreOwner":  # טיפול בבעל החנות
             try:
-                store_owner_page = StoreOwnerHome(user)  # ← יצירת עמוד בעל החנות
+                store_owner_page = StoreOwnerHome(user)  # יצירת עמוד בעל החנות
                 store_owner_page.logout_requested.connect(lambda: self._logout())
                 
                 self.stack.addWidget(store_owner_page)
