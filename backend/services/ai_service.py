@@ -7,6 +7,7 @@ from models.user_model import User
 from models.product_model import Product
 from models.order_model import Order
 from models.order_item_model import OrderItem
+from routers.intent_router import route_intent_and_answer
 
 # -------- הגדרות מודל / אופציות --------
 OLLAMA_BASE = os.getenv("OLLAMA_URL", "http://localhost:11434")
@@ -148,13 +149,19 @@ def answer_question(db: Session, question: str, user_id: int) -> str:
     role = _resolve_role(u)
     username = getattr(u, "username", None) or getattr(u, "contact_name", "user")
 
+    # 1) נסה קודם תשובה דטרמיניסטית מה-DB (Intent Router)
+    intent_ans = route_intent_and_answer(db, role, u.id, question)
+    if intent_ans:
+        return intent_ans  # מדויק ומהיר
+
+    # 2) אם אין כוונה מזוהה — בונים הקשר וניגשים ל-LLM
     if role == "Supplier":
         ctx = supplier_snapshot(db, u.id)
     else:
         ctx = owner_snapshot(db, u.id)
-
     prompt = build_prompt(role, username, ctx, question)
     return ask_ollama_generate(prompt)
+
 
 # Cache קטן ל-Snapshot (אם תרצי להשתמש ב-/context מחוץ ל/ask)
 _cache: dict[str, tuple[float, str]] = {}
