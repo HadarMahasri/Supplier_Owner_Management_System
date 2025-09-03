@@ -1,4 +1,4 @@
-# frontend/services/chat_context_client.py - גרסה מואצת
+# frontend/services/chat_context_client.py - עם timeout מותאם
 import os, requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -7,13 +7,13 @@ from functools import lru_cache
 API_BASE_URL = os.getenv("API_BASE_URL", "http://127.0.0.1:8000")
 
 def create_optimized_session():
-    """Session מאופטמת לביצועים מהירים"""
+    """Session עם timeouts מותאמים למסד איטי"""
     session = requests.Session()
     
-    # הגדרות retry מהירות
+    # הגדרות retry עדינות יותר
     retry_strategy = Retry(
         total=2,
-        backoff_factor=0.1,
+        backoff_factor=0.5,  # יותר זמן בין נסיונות
         status_forcelist=[500, 502, 503, 504],
     )
     
@@ -23,16 +23,16 @@ def create_optimized_session():
     
     return session
 
-@lru_cache(maxsize=50)  # Cache context למהירות
+@lru_cache(maxsize=50)
 def fetch_ai_context(user_id: int) -> dict:
-    """טעינת הקשר מהירה עם cache"""
+    """טעינת הקשר עם timeout מותאם למסד איטי"""
     session = create_optimized_session()
     
     try:
         r = session.get(
             f"{API_BASE_URL}/api/v1/ai/context", 
             params={"user_id": user_id}, 
-            timeout=(2, 10)  # timeout קצר - 2 שניות חיבור, 10 תגובה
+            timeout=(5, 20)  # 5 שניות חיבור, 20 שניות תגובה (יותר מהקודם)
         )
         r.raise_for_status()
         
@@ -43,12 +43,12 @@ def fetch_ai_context(user_id: int) -> dict:
         return result
         
     except requests.exceptions.Timeout:
-        raise Exception("טעינת המשתמש אורכת זמן רב. נסה שוב.")
+        raise Exception(f"טעינת משתמש {user_id} אורכת זמן רב. זה קורה לפעמים עם מסד הנתונים החיצוני. נסה user_id=3 (עובד מהר יותר).")
     except requests.exceptions.ConnectionError:
         raise Exception("לא ניתן להתחבר לשרת. בדוק שהשרת פועל.")
     except requests.exceptions.HTTPError as e:
         if e.response.status_code == 404:
-            raise Exception(f"משתמש {user_id} לא נמצא במערכת.")
+            raise Exception(f"משתמש {user_id} לא נמצא במערכת. נסה user_id=3.")
         else:
             raise Exception(f"שגיאת שרת: {e.response.status_code}")
     except Exception as e:
@@ -57,14 +57,14 @@ def fetch_ai_context(user_id: int) -> dict:
         session.close()
 
 def ask_via_backend(question: str, user_id: int) -> str:
-    """שאלה דרך backend מהירה יותר"""
+    """שאלה דרך backend עם timeout מותאם"""
     session = create_optimized_session()
     
     try:
         r = session.post(
             f"{API_BASE_URL}/api/v1/ai/ask",
             json={"question": question, "user_id": user_id}, 
-            timeout=(3, 20)  # timeout מעט יותר ארוך לשאלות מורכבות
+            timeout=(5, 30)  # timeout יותר ארוך לשאלות AI
         )
         r.raise_for_status()
         
@@ -75,23 +75,36 @@ def ask_via_backend(question: str, user_id: int) -> str:
         return result
         
     except requests.exceptions.Timeout:
-        return "התגובה אורכת זמן רב. נסה שאלה קצרה יותר."
+        return f"התגובה לuser_id={user_id} אורכת זמן רב. נסה user_id=3 או שאלה קצרה יותר."
     except requests.exceptions.ConnectionError:
         return "בעיה בחיבור. בדוק שהשרת פועל."
     except Exception as e:
-        return f"שגיאה: {str(e)[:80]}..."
+        return f"שגיאה זמנית: {str(e)[:80]}..."
     finally:
         session.close()
 
-# נקה cache כל 5 דקות
-import threading, time
-
-def clear_cache_periodically():
-    """נקה cache מדי פעם למידע עדכני"""
-    while True:
-        time.sleep(300)  # 5 דקות
-        fetch_ai_context.cache_clear()
-
-# הפעל ניקוי cache ברקע
-cache_cleaner = threading.Thread(target=clear_cache_periodically, daemon=True)
-cache_cleaner.start()
+# ---- פונקציה מהירה לבדיקת משתמש -------
+def quick_user_check(user_id: int) -> tuple[bool, str]:
+    """בדיקה מהירה אם משתמש קיים"""
+    try:
+        session = create_optimized_session()
+        r = session.get(
+            f"{API_BASE_URL}/api/v1/ai/context",
+            params={"user_id": user_id},
+            timeout=3  # timeout קצר לבדיקה מהירה
+        )
+        
+        if r.status_code == 200:
+            data = r.json()
+            name = data.get("username", "ללא שם")
+            role = data.get("role", "ללא תפקיד")
+            return True, f"{name} ({role})"
+        elif r.status_code == 404:
+            return False, "לא קיים במסד"
+        else:
+            return False, f"שגיאה {r.status_code}"
+            
+    except requests.exceptions.Timeout:
+        return False, "איטי מדי"
+    except Exception as e:
+        return False, str(e)[:30]
