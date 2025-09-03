@@ -4,15 +4,15 @@ from dataclasses import dataclass
 from typing import List, Optional
 import os
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import Qt, Signal, QThread
 from PySide6.QtGui import QPixmap, QBrush, QPalette, QFont
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QPushButton, QLabel, QScrollArea,
     QFrame, QGridLayout, QMessageBox, QSpinBox, QFileDialog, QFormLayout, QLayout,
-    QStackedWidget
+    QStackedWidget, QProgressDialog
 )
 
-# שירי כמו אצלך
+# שירת כמו אצלך
 from services import api_client
 
 
@@ -28,7 +28,42 @@ class ProductDTO:
     image_url: Optional[str] = None
 
 
-# ========= Embedded Edit Form =========
+# ========= Thread להעלאת תמונות =========
+class ImageUploadThread(QThread):
+    """Thread להעלאת תמונות ל-Cloudinary בפעולה אסינכרונית"""
+    upload_finished = Signal(dict)  # תוצאה
+    upload_failed = Signal(str)     # הודעת שגיאה
+    
+    def __init__(self, supplier_id: int, image_path: str, product_data: dict, is_new_product: bool = True):
+        super().__init__()
+        self.supplier_id = supplier_id
+        self.image_path = image_path
+        self.product_data = product_data
+        self.is_new_product = is_new_product
+    
+    def run(self):
+        try:
+            if self.is_new_product:
+                # יצירת מוצר חדש עם תמונה
+                result = api_client.create_product_with_image(
+                    supplier_id=self.supplier_id,
+                    name=self.product_data["name"],
+                    price=self.product_data["price"],
+                    min_qty=self.product_data["min_qty"],
+                    image_path=self.image_path
+                )
+            else:
+                # עדכון תמונה למוצר קיים
+                product_id = self.product_data["id"]
+                result = api_client.update_product_image(product_id, self.image_path)
+            
+            self.upload_finished.emit(result)
+            
+        except Exception as e:
+            self.upload_failed.emit(str(e))
+
+
+# ========= Embedded Edit Form - מעודכן =========
 class ProductEditForm(QWidget):
     """טופס עריכה משולב בעמוד במקום dialog"""
     save_requested = Signal(dict)  # payload
@@ -38,6 +73,8 @@ class ProductEditForm(QWidget):
         super().__init__()
         self.product = product
         self.setLayoutDirection(Qt.RightToLeft)
+        self._selected_image_path = ""
+        self._upload_thread = None
         self.setup_ui()
         
     def setup_ui(self):
@@ -54,7 +91,7 @@ class ProductEditForm(QWidget):
         hbox.setContentsMargins(28, 20, 28, 12)
         hbox.setSpacing(10)
         
-        title_text = "הוספת מוצר זמין" if not (self.product and self.product.id) else "עריכת מוצר"
+        title_text = "הוספת מוצר חדש" if not (self.product and self.product.id) else "עריכת מוצר"
         title = QLabel(title_text)
         title.setObjectName("DialogTitle")
         title.setAlignment(Qt.AlignCenter)
@@ -76,11 +113,10 @@ class ProductEditForm(QWidget):
         form.setHorizontalSpacing(12)
         form.setVerticalSpacing(14)
 
-
         # Fields
         self.name_edit = QLineEdit(self.product.name if self.product else "")
         self.name_edit.setObjectName("Input")
-        self.name_edit.setPlaceholderText("לדוגמה: גבינה לבנה %5 · 500 גרם")
+        self.name_edit.setPlaceholderText("לדוגמה: גבינה לבנה 5% • 500 גרם")
         
         initial_price = f"{self.product.price:.2f}" if (self.product and self.product.price > 0) else ""
         self.price_edit = QLineEdit(initial_price)
@@ -97,16 +133,23 @@ class ProductEditForm(QWidget):
         self.stock_edit.setRange(0, 10**7)
         self.stock_edit.setValue(self.product.stock if self.product else 0)
 
-        # תיקון 5: תמונה כ-LABEL במקום QLineEdit
-        self.img_path_label = QLabel(self.product.image_url if (self.product and self.product.image_url) else "לא נבחרה תמונה")
+        # תמונה - מעודכן עם תמיכה ב-Cloudinary
+        self.img_path_label = QLabel()
         self.img_path_label.setObjectName("ImagePathLabel")
-        self._selected_image_path = self.product.image_url if (self.product and self.product.image_url) else ""
+        self._update_image_label()
 
-        self.btn_no_image = QPushButton("לא נבחר קובץ")
-        self.btn_no_image.setObjectName("ImageButtonSelected" if not self._selected_image_path else "ImageButton")
+        self.btn_no_image = QPushButton("ללא תמונה")
+        self.btn_no_image.setObjectName("ImageButton")
         
         self.btn_browse = QPushButton("בחירת קובץ")
-        self.btn_browse.setObjectName("ImageButtonSelected" if self._selected_image_path else "ImageButton")
+        self.btn_browse.setObjectName("ImageButton")
+        
+        # תמונה קטנה לתצוגה מקדימה
+        self.preview_label = QLabel()
+        self.preview_label.setFixedSize(120, 90)
+        self.preview_label.setAlignment(Qt.AlignCenter)
+        self.preview_label.setObjectName("ImagePreview")
+        self._update_preview()
         
         img_row = QHBoxLayout()
         img_row.setSpacing(10)
@@ -125,9 +168,11 @@ class ProductEditForm(QWidget):
         min_label = QLabel("כמות מינימלית\nלהזמנה")
         min_label.setObjectName("FieldLabel")
         form.addRow(min_label, self.min_edit)
+        
 
         form.addRow(lab("תמונת המוצר"), self.img_path_label)
         form.addRow("", self._as_widget(img_row))
+        form.addRow(lab("תצוגה מקדימה"), self.preview_label)
 
         root.addWidget(content, 1)
 
@@ -138,7 +183,7 @@ class ProductEditForm(QWidget):
         cancel = QPushButton("ביטול")
         cancel.setObjectName("Cancel")
         
-        save_text = "לחץ להוספת מוצר" if not (self.product and self.product.id) else "שמור שינויים"
+        save_text = "הוסף מוצר" if not (self.product and self.product.id) else "שמור שינויים"
         save = QPushButton(save_text)
         save.setObjectName("Save")
         
@@ -158,11 +203,66 @@ class ProductEditForm(QWidget):
         w.setLayout(layout)
         return w
 
+    def _update_image_label(self):
+        """עדכון תווית התמונה"""
+        if self._selected_image_path and os.path.exists(self._selected_image_path):
+            # תמונה מקומית חדשה נבחרה
+            filename = os.path.basename(self._selected_image_path)
+            self.img_path_label.setText(f"נבחר: {filename}")
+        elif self.product and self.product.image_url:
+            # תמונה קיימת מ-Cloudinary
+            self.img_path_label.setText("תמונה קיימת (Cloudinary)")
+            # ← הסר את השורה הזו: self._selected_image_path = self.product.image_url
+        else:
+            self.img_path_label.setText("לא נבחרה תמונה")
+            
+    def _update_preview(self):
+        """עדכון תצוגה מקדימה של התמונה"""
+        if self._selected_image_path and os.path.exists(self._selected_image_path):
+            # תמונה מקומית
+            pix = QPixmap(self._selected_image_path)
+            if not pix.isNull():
+                scaled_pix = pix.scaled(self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.preview_label.setPixmap(scaled_pix)
+                self.preview_label.setStyleSheet("")
+                return
+        elif self.product and self.product.image_url and "cloudinary.com" in self.product.image_url:
+            # תמונה מ-Cloudinary - נטען אותה
+            try:
+                import requests
+                response = requests.get(self.product.image_url, timeout=10)
+                if response.status_code == 200:
+                    pix = QPixmap()
+                    pix.loadFromData(response.content)
+                    if not pix.isNull():
+                        scaled_pix = pix.scaled(self.preview_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                        self.preview_label.setPixmap(scaled_pix)
+                        self.preview_label.setStyleSheet("")
+                        return
+            except Exception as e:
+                print(f"שגיאה בטעינת תמונה מ-Cloudinary בתצוגה מקדימה: {e}")
+            
+            # אם הטעינה נכשלה
+            self.preview_label.setText("תמונה\nמ-Cloudinary\n(שגיאה בטעינה)")
+            self.preview_label.setStyleSheet("color: #f59e0b; font-weight: bold;")
+            return
+        
+        # ללא תמונה
+        self.preview_label.clear()
+        self.preview_label.setText("אין תמונה")
+        self.preview_label.setStyleSheet("color: #9ca3af;")
+
     def _pick_image(self):
-        p, _ = QFileDialog.getOpenFileName(self, "בחרי תמונה", "", "Images (*.png *.jpg *.jpeg)")
+        p, _ = QFileDialog.getOpenFileName(
+            self, 
+            "בחירת תמונת מוצר", 
+            "", 
+            "Images (*.png *.jpg *.jpeg *.gif *.bmp *.webp)"
+        )
         if p:
             self._selected_image_path = p
-            self.img_path_label.setText(os.path.basename(p))  # רק שם הקובץ
+            self._update_image_label()
+            self._update_preview()
             self.btn_no_image.setObjectName("ImageButton")
             self.btn_browse.setObjectName("ImageButtonSelected")
         else:
@@ -172,7 +272,8 @@ class ProductEditForm(QWidget):
 
     def _no_image(self):
         self._selected_image_path = ""
-        self.img_path_label.setText("לא נבחרה תמונה")
+        self._update_image_label()
+        self._update_preview()
         self.btn_no_image.setObjectName("ImageButtonSelected")
         self.btn_browse.setObjectName("ImageButton")
         self.setStyleSheet(self._form_stylesheet())
@@ -189,7 +290,6 @@ class ProductEditForm(QWidget):
                 price = 0.0
             else:
                 price = float(price_text)
-                # תיקון 4: מחיר לא יכול להיות שלילי
                 if price < 0:
                     QMessageBox.warning(self, "שגיאה", "מחיר לא יכול להיות שלילי.")
                     return None
@@ -206,7 +306,7 @@ class ProductEditForm(QWidget):
             "name": name,
             "price": price,
             "min_qty": int(self.min_edit.value()),
-            "image_url": (self._selected_image_path or None),
+            "image_path": (self._selected_image_path if self._selected_image_path and os.path.exists(self._selected_image_path) else None),
         }
 
     def _form_stylesheet(self) -> str:
@@ -221,6 +321,10 @@ class ProductEditForm(QWidget):
         QLabel#ImagePathLabel { 
             padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; 
             font-size: 14px; background: #f9fafb; color: #6b7280;
+        }
+        
+        QLabel#ImagePreview {
+            border: 2px dashed #e5e7eb; border-radius: 8px; background: #f9fafb;
         }
 
         QLineEdit#Input {
@@ -255,7 +359,7 @@ class ProductEditForm(QWidget):
         """
 
 
-# ========= Stock Adjustment (embedded) =========
+# ========= Stock Adjustment (embedded) - ללא שינוי =========
 class StockAdjustForm(QWidget):
     """טופס עדכון מלאי משולב"""
     save_requested = Signal(int)  # new stock value
@@ -278,7 +382,7 @@ class StockAdjustForm(QWidget):
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
         
-        # ספינבוקס
+        # ספין בוקס
         form_layout = QHBoxLayout()
         form_layout.addStretch()
         
@@ -313,7 +417,7 @@ class StockAdjustForm(QWidget):
         layout.addLayout(buttons_layout)
 
 
-# ========= Product Card - ללא שינוי =========
+# ========= Product Card - מעודכן עם תמיכה בתמונות Cloudinary =========
 class ProductCard(QFrame):
     editRequested = Signal(int)
     deleteRequested = Signal(int)
@@ -331,7 +435,7 @@ class ProductCard(QFrame):
         root.setSpacing(8)
         root.setContentsMargins(12, 12, 12, 12)
 
-        # תמונה
+        # תמונה - מעודכן עם תמיכה ב-Cloudinary
         self.img = QLabel()
         self.img.setFixedHeight(120)
         self.img.setAlignment(Qt.AlignCenter)
@@ -366,7 +470,7 @@ class ProductCard(QFrame):
         info.addLayout(stock_row)
         root.addLayout(info)
 
-        # כפתורים אחרים
+        # כפתורים אחרי
         actions = QHBoxLayout()
         actions.setSpacing(6)
         self.btn_delete = QPushButton("מחק מוצר")
@@ -383,21 +487,52 @@ class ProductCard(QFrame):
         self.btn_edit.clicked.connect(lambda: self.editRequested.emit(self.product.id))
         self.btn_delete.clicked.connect(lambda: self.deleteRequested.emit(self.product.id))
 
-    def set_image(self, path_or_url: Optional[str]):
-        if not path_or_url:
-            self.img.setPixmap(QPixmap())
+    def set_image(self, url_or_path: Optional[str]):
+        """הצגת תמונה - תמיכה ב-URL של Cloudinary ובקבצים מקומיים"""
+        if not url_or_path:
+            # אין תמונה
+            self.img.setText("אין תמונה")
+            self.img.setStyleSheet("color: #9ca3af; border: 1px dashed #e5e7eb;")
             return
-        pix = QPixmap(path_or_url)
-        if not pix.isNull():
-            self.img.setPixmap(pix.scaled(self.img.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        
+        if url_or_path.startswith("http") and "cloudinary.com" in url_or_path:
+            # תמונה מ-Cloudinary - נטען אותה מה-URL
+            try:
+                import requests
+                response = requests.get(url_or_path, timeout=10)
+                if response.status_code == 200:
+                    pix = QPixmap()
+                    pix.loadFromData(response.content)
+                    if not pix.isNull():
+                        scaled_pix = pix.scaled(self.img.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                        self.img.setPixmap(scaled_pix)
+                        self.img.setStyleSheet("")
+                        return
+            except Exception as e:
+                print(f"שגיאה בטעינת תמונה מ-Cloudinary: {e}")
+            
+            # אם הטעינה נכשלה - הצג placeholder
+            self.img.setText("תמונה מ-\nCloudinary\n(שגיאה בטעינה)")
+            self.img.setStyleSheet("color: #f59e0b; font-weight: bold; border: 1px solid #f59e0b;")
+            
+        elif os.path.exists(url_or_path):
+            # תמונה מקומית
+            pix = QPixmap(url_or_path)
+            if not pix.isNull():
+                scaled_pix = pix.scaled(self.img.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+                self.img.setPixmap(scaled_pix)
+                self.img.setStyleSheet("")
+            else:
+                self.img.setText("שגיאה\nבתמונה")
+                self.img.setStyleSheet("color: #ef4444;")
         else:
-            self.img.setPixmap(QPixmap())
-
+            self.img.setText("תמונה\nלא זמינה")
+            self.img.setStyleSheet("color: #f59e0b;")
     def update_stock_label(self, value: int):
         self.stock_lbl.setText(f"כמות במלאי: {value}")
 
 
-# ========= Main Page =========
+# ========= Main Page - מעודכן =========
 class SupplierProductsPage(QWidget):
     def __init__(self, supplier_id: int, background_image: Optional[str] = None):
         super().__init__()
@@ -407,6 +542,7 @@ class SupplierProductsPage(QWidget):
         self.supplier_id = supplier_id
         self._all_products: List[ProductDTO] = []
         self._cards: dict[int, ProductCard] = {}
+        self._upload_thread = None
 
         # רקע קבוע (אופציונלי)
         if background_image and os.path.exists(background_image):
@@ -421,7 +557,7 @@ class SupplierProductsPage(QWidget):
         root.setContentsMargins(24, 24, 24, 24)
         root.setSpacing(10)
 
-        # תיקון 1: עכשיו הכל embedded במקום dialogs
+        # עכשיו הכל embedded במקום dialogs
         self.content_stack = QStackedWidget()
         
         # עמוד רשימת מוצרים
@@ -443,10 +579,10 @@ class SupplierProductsPage(QWidget):
         # כותרת + הוספה
         header = QHBoxLayout()
         header.setAlignment(Qt.AlignRight)
-        title = QLabel("הוספת מוצרים עבור :")
+        title = QLabel("ניהול מוצרים עבור הספק שלי")
         title.setObjectName("H1")
 
-        self.btn_add = QPushButton("הוספת מוצר")
+        self.btn_add = QPushButton("הוסף מוצר חדש")
         self.btn_add.setObjectName("Primary")
         self.btn_add.clicked.connect(self._show_add_form)
 
@@ -466,7 +602,7 @@ class SupplierProductsPage(QWidget):
 
         # כותרת "מוצרים שקיימים במערכת"
         sub_row = QHBoxLayout()
-        sub = QLabel("מוצרים שקיימים במערכת")
+        sub = QLabel("מוצרים קיימים במערכת")
         sub.setObjectName("H2")
         sub_row.addWidget(sub, 0, Qt.AlignRight)
         sub_row.addStretch(1)
@@ -526,61 +662,136 @@ class SupplierProductsPage(QWidget):
         self.content_stack.setCurrentWidget(self.products_page)
 
     def _handle_add_product(self, payload: dict):
-        """טיפול בהוספת מוצר"""
+        """טיפול בהוספת מוצר - עם תמיכה בהעלאת תמונה"""
         try:
-            created = api_client.create_product({
-                "supplier_id": self.supplier_id,
-                **payload
-            })
-            new = ProductDTO(
-                id=created["id"], supplier_id=created["supplier_id"],
-                name=created["name"], price=float(created["price"]),
-                min_qty=int(created["min_qty"]), stock=int(created["stock"]),
-                image_url=created.get("image_url")
-            )
-            self._all_products.insert(0, new)
-            self._render_products(self._all_products)
-            self._back_to_products_list()
+            image_path = payload.get("image_path")
+            
+            if image_path:
+                # יש תמונה - נשתמש ב-Thread
+                progress = QProgressDialog("מעלה מוצר עם תמונה...", "ביטול", 0, 0, self)
+                progress.setWindowModality(Qt.WindowModal)
+                progress.show()
+                
+                self._upload_thread = ImageUploadThread(
+                    supplier_id=self.supplier_id,
+                    image_path=image_path,
+                    product_data=payload,
+                    is_new_product=True
+                )
+                
+                self._upload_thread.upload_finished.connect(
+                    lambda result: self._on_upload_finished(result, progress)
+                )
+                self._upload_thread.upload_failed.connect(
+                    lambda error: self._on_upload_failed(error, progress)
+                )
+                
+                self._upload_thread.start()
+            else:
+                # אין תמונה - יצירה רגילה
+                created = api_client.create_product({
+                    "supplier_id": self.supplier_id,
+                    "name": payload["name"],
+                    "price": payload["price"],
+                    "min_qty": payload["min_qty"]
+                })
+                self._add_new_product_to_list(created)
+                
         except Exception as e:
             QMessageBox.critical(self, "שגיאה", f"יצירת מוצר נכשלה: {e}")
 
+    def _on_upload_finished(self, result: dict, progress: QProgressDialog):
+        """טיפול בסיום הצלחת העלאת תמונה"""
+        progress.close()
+        self._add_new_product_to_list(result)
+
+    def _on_upload_failed(self, error: str, progress: QProgressDialog):
+        """טיפול בכשל העלאת תמונה"""
+        progress.close()
+        QMessageBox.critical(self, "שגיאה", f"העלאת מוצר נכשלה: {error}")
+
+    def _add_new_product_to_list(self, created_product: dict):
+        """הוספת מוצר חדש לרשימה"""
+        new = ProductDTO(
+            id=created_product["id"], 
+            supplier_id=created_product["supplier_id"],
+            name=created_product["name"], 
+            price=float(created_product["price"]),
+            min_qty=int(created_product["min_qty"]), 
+            stock=int(created_product["stock"]),
+            image_url=created_product.get("image_url")
+        )
+        self._all_products.insert(0, new)
+        self._render_products(self._all_products)
+        self._back_to_products_list()
+
     def _handle_edit_product(self, pid: int, payload: dict):
+        """טיפול בעריכת מוצר"""
         try:
             p = next((x for x in self._all_products if x.id == pid), None)
             if not p:
                 return
 
-            full_payload = {
-                "supplier_id": p.supplier_id,                # <<< חשוב לשלוח גם ב-PUT
-                "name": payload.get("name", p.name),
-                "price": payload.get("price", p.price),
-                "min_qty": payload.get("min_qty", p.min_qty),
-                "stock": payload.get("stock", p.stock),       # משמר את המלאי הקיים
-                "image_url": payload.get("image_url", p.image_url),
+            image_path = payload.get("image_path")
+            
+            # עדכון השדות הבסיסיים תמיד - שימוש ישיר בערכים מהטופס
+            basic_update = {
+                "supplier_id": p.supplier_id,
+                "name": payload["name"],        # ← ישירות מהטופס
+                "price": payload["price"],      # ← ישירות מהטופס  
+                "min_qty": payload["min_qty"],  # ← ישירות מהטופס
+                "stock": p.stock,      
+                "image_url": p.image_url,       # שמירה על התמונה הקיימת
             }
 
-            updated = api_client.update_product(pid, full_payload)
+            updated = api_client.update_product(pid, basic_update)
+            
+            # עדכון האובייקט המקומי עם הערכים החדשים
             p.name = updated["name"]
             p.price = float(updated["price"])
             p.min_qty = int(updated["min_qty"])
 
-            # כאן מכניסים את הלוגיקה המיוחדת למלאי:
-            sent_stock = full_payload["stock"]
-            returned_stock = updated.get("stock")
-
-            if returned_stock is None:
-                pass  # לא חזר שדה – נשאר הערך הקיים
-            elif int(returned_stock) == 0 and int(sent_stock) > 0:
-                pass  # השרת החזיר 0 למרות ששלחנו ערך – נשמור על הערך הקיים
+            # אם יש תמונה חדשה
+            if image_path:
+                progress = QProgressDialog("מעדכן תמונת מוצר...", "ביטול", 0, 0, self)
+                progress.setWindowModality(Qt.WindowModal)
+                progress.show()
+                
+                self._upload_thread = ImageUploadThread(
+                    supplier_id=self.supplier_id,
+                    image_path=image_path,
+                    product_data={"id": pid},
+                    is_new_product=False
+                )
+                
+                self._upload_thread.upload_finished.connect(
+                    lambda result: self._on_image_update_finished(result, progress, p)
+                )
+                self._upload_thread.upload_failed.connect(
+                    lambda error: self._on_upload_failed(error, progress)
+                )
+                
+                self._upload_thread.start()
             else:
-                p.stock = int(returned_stock)
-
-            p.image_url = updated.get("image_url")
-            self._render_products(self._all_products)
-            self._back_to_products_list()
+                # אין תמונה חדשה - סיום
+                self._render_products(self._all_products)
+                self._back_to_products_list()
+                
         except Exception as e:
             QMessageBox.critical(self, "שגיאה", f"עדכון מוצר נכשל: {e}")
 
+    def _on_image_update_finished(self, result: dict, progress: QProgressDialog, product: ProductDTO):
+        """טיפול בסיום עדכון תמונה"""
+        progress.close()
+        
+        # עדכון ה-URL של התמונה
+        if "product" in result:
+            product.image_url = result["product"].get("image_url")
+        elif "image_data" in result:
+            product.image_url = result["image_data"].get("url")
+        
+        self._render_products(self._all_products)
+        self._back_to_products_list()
 
     def _handle_stock_update(self, pid: int, new_stock: int):
         """טיפול בעדכון מלאי"""
@@ -610,7 +821,7 @@ class SupplierProductsPage(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "שגיאה", f"שגיאה בטעינת מוצרים: {e}")
 
-    # ---- UI logic - ללא שינוי ----
+    # ---- UI logic ----
     def _render_products(self, items: List[ProductDTO]):
         for i in reversed(range(self.grid.count())):
             w = self.grid.itemAt(i).widget()
@@ -638,7 +849,7 @@ class SupplierProductsPage(QWidget):
         filtered = [p for p in self._all_products if txt in p.name]
         self._render_products(filtered)
 
-    # ---- Actions - עודכנו להשתמש בטפסים המשולבים ----
+    # ---- Actions ----
     def _edit_product(self, pid: int):
         p = next((x for x in self._all_products if x.id == pid), None)
         if p:
@@ -660,7 +871,7 @@ class SupplierProductsPage(QWidget):
         if p:
             self._show_stock_form(p)
 
-    # ---- Styles - ללא שינוי ----
+    # ---- Styles ----
     def _stylesheet(self) -> str:
         return """
         QWidget { font-family: "Rubik", "Segoe UI", Arial; font-size: 14px; }

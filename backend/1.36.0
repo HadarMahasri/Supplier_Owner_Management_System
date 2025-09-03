@@ -1,0 +1,4 @@
+Requirement already satisfied: cloudinary in c:\users\user\documents\לימודים\שנה ג' סמסטר ב\הנדסת מערכת חלונות\supplier_owner_management_system-1\.venv\lib\site-packages (1.44.1)
+Requirement already satisfied: six in c:\users\user\documents\לימודים\שנה ג' סמסטר ב\הנדסת מערכת חלונות\supplier_owner_management_system-1\.venv\lib\site-packages (from cloudinary) (1.17.0)
+Requirement already satisfied: urllib3>=1.26.5 in c:\users\user\documents\לימודים\שנה ג' סמסטר ב\הנדסת מערכת חלונות\supplier_owner_management_system-1\.venv\lib\site-packages (from cloudinary) (2.5.0)
+Requirement already satisfied: certifi in c:\users\user\documents\לימודים\שנה ג' סמסטר ב\הנדסת מערכת חלונות\supplier_owner_management_system-1\.venv\lib\site-packages (from cloudinary) (2025.8.3)

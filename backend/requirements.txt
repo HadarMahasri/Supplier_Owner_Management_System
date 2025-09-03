@@ -13,8 +13,9 @@ pydantic>=2.4,<3.0
 SQLAlchemy>=2.0,<2.1
 pyodbc>=5.0,<6.0
 
-# === Shared ===
-python-dotenv>=1.0,<2.0
+
+# === Cloudinary ===
+cloudinary>=1.36.0
 
 # === Optional (for later features) ===
 # For password hashing
