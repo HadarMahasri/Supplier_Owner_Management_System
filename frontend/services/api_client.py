@@ -38,6 +38,7 @@ def create_product_with_image(
     name: str, 
     price: float, 
     min_qty: int,
+    stock: int = 0,
     image_path: Optional[str] = None
 ) -> Dict[str, Any]:
     """
@@ -47,7 +48,8 @@ def create_product_with_image(
         "supplier_id": supplier_id,
         "name": name,
         "price": price,
-        "min_qty": min_qty
+        "min_qty": min_qty,
+        "stock": stock
     }
     
     files = {}

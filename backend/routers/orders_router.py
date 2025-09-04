@@ -118,9 +118,20 @@ def update_order_status(order_id: int, status_update: OrderStatusUpdate, supplie
     o = db.query(Order).filter(Order.id == order_id, Order.supplier_id == supplier_id).first()
     if not o:
         raise HTTPException(status_code=404, detail="הזמנה לא נמצאה או אינה שייכת לך")
+    
+    # בדיקה ועדכון מלאי לפני שינוי הסטטוס
+    if o.status == "בוצעה" and status_update.status == "בתהליך":
+        # הורדת מלאי עבור כל פריט בהזמנה
+        for item in o.items:
+            product = db.query(Product).filter(Product.id == item.product_id).first()
+            if product:
+                new_stock = max(0, product.stock - item.quantity)
+                product.stock = new_stock
+    
     o.status = status_update.status
     db.commit()
     return {"message": "סטטוס ההזמנה עודכן בהצלחה", "new_status": o.status}
+
 
 @router.get("/{order_id}", response_model=OrderResponse)
 def get_order_by_id(order_id: int, db: Session = Depends(get_db)):
