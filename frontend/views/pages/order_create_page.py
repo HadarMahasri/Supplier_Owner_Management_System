@@ -82,22 +82,24 @@ class OrderCreatePage(QWidget):
         self._load_products()
 
     def setup_ui(self):
-        """בניית ממשק מעוצב ומודרני"""
+        """בניית ממשק מעוצב ומודרני (עם כותרת ותקציר קומפקטיים)"""
+        # עיקרי העמוד
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(24, 24, 24, 24)
-        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(12, 12, 12, 12)   # היה 24
+        main_layout.setSpacing(12)                       # היה 20
 
         # כותרת מעוצבת
         header_frame = QFrame()
         header_frame.setObjectName("headerFrame")
         header_layout = QVBoxLayout(header_frame)
-        header_layout.setContentsMargins(20, 16, 20, 16)
-        header_layout.setSpacing(8)
+        header_layout.setContentsMargins(12, 8, 12, 8)   # היה 20,16,20,16
+        header_layout.setSpacing(4)                      # היה 8
+        header_frame.setMaximumHeight(72)                # מגבלה לגובה הכותרת
 
         title = QLabel("בחר מוצרים להזמנה")
         title.setObjectName("pageTitle")
         title.setAlignment(Qt.AlignCenter)
-        
+
         subtitle = QLabel("בחר את המוצרים הרצויים והכמויות שברצונך להזמין")
         subtitle.setObjectName("pageSubtitle")
         subtitle.setAlignment(Qt.AlignCenter)
@@ -111,35 +113,37 @@ class OrderCreatePage(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.NoFrame)
         scroll.setObjectName("productsScrollArea")
-        
+
         self.products_container = QWidget()
         self.products_container.setObjectName("productsContainer")
         self.products_layout = QVBoxLayout(self.products_container)
         self.products_layout.setContentsMargins(0, 0, 0, 0)
         self.products_layout.setSpacing(12)
-        
+
         scroll.setWidget(self.products_container)
         main_layout.addWidget(scroll, 1)
 
-        # תקציר הזמנה
+        # תקציר הזמנה (קומפקטי)
         summary_frame = QFrame()
         summary_frame.setObjectName("summaryFrame")
         summary_layout = QVBoxLayout(summary_frame)
-        summary_layout.setContentsMargins(20, 16, 20, 16)
-        summary_layout.setSpacing(8)
-        
+        summary_layout.setContentsMargins(12, 8, 12, 8)  # היה 20,16,20,16
+        summary_layout.setSpacing(4)                     # היה 8
+        summary_frame.setMaximumHeight(120)              # מגבלה לגובה התקציר
+
         summary_title = QLabel("תקציר הזמנה")
         summary_title.setObjectName("summaryTitle")
-        
+
         self.summary_label = QLabel("סה״כ פריטים: 0 | סה״כ לתשלום: 0.00 ₪")
         self.summary_label.setObjectName("summaryMain")
         self.summary_label.setAlignment(Qt.AlignRight)
-        
+
         self.detailed_summary = QLabel("")
         self.detailed_summary.setObjectName("summaryDetails")
         self.detailed_summary.setAlignment(Qt.AlignRight)
         self.detailed_summary.setWordWrap(True)
-        
+        self.detailed_summary.setVisible(False)          # מצמצם גובה כברירת מחדל
+
         summary_layout.addWidget(summary_title)
         summary_layout.addWidget(self.summary_label)
         summary_layout.addWidget(self.detailed_summary)
@@ -150,20 +154,21 @@ class OrderCreatePage(QWidget):
         buttons_layout = QHBoxLayout(buttons_frame)
         buttons_layout.setContentsMargins(0, 0, 0, 0)
         buttons_layout.setSpacing(12)
-        
+
         buttons_layout.addStretch()
-        
+
         self.btn_cancel = QPushButton("ביטול")
         self.btn_cancel.setObjectName("cancelBtn")
         self.btn_cancel.clicked.connect(self.canceled.emit)
-        
+
         self.btn_submit = QPushButton("בצע הזמנה")
         self.btn_submit.setObjectName("submitBtn")
         self.btn_submit.clicked.connect(self._submit_order)
-        
+
         buttons_layout.addWidget(self.btn_cancel)
         buttons_layout.addWidget(self.btn_submit)
         main_layout.addWidget(buttons_frame)
+
 
     def _setup_styles(self):
         """עיצוב מודרני ונקי"""
@@ -182,6 +187,13 @@ class OrderCreatePage(QWidget):
                 margin-bottom: 8px;
             }
 
+            QPushButton#linkBtn {
+                border: none; background: transparent;
+                font-size: 11px; color: #2563eb; padding: 0; margin: 0;
+            }
+            QPushButton#linkBtn:hover { text-decoration: underline; }
+
+                                    
             QLabel#pageTitle {
                 font-size: 28px;
                 font-weight: 700;
@@ -213,7 +225,7 @@ class OrderCreatePage(QWidget):
                     stop:0 #ffffff, stop:1 #f8fafc);
                 border: 2px solid #e2e8f0;
                 border-radius: 16px;
-                margin: 4px;
+                margin: 2px;
                 padding: 0;
             }
 
@@ -231,15 +243,15 @@ class OrderCreatePage(QWidget):
 
             /* שמות מוצרים */
             QLabel[objectName="productName"] {
-                font-size: 18px;
+                font-size: 15px;
                 font-weight: 700;
                 color: #1e293b;
                 margin: 0;
-                padding: 4px 0;
+                padding: 2px 0;
             }
 
             QLabel[objectName="productPrice"] {
-                font-size: 16px;
+                font-size: 14px;
                 font-weight: 600;
                 color: #3b82f6;
                 margin: 0;
@@ -247,7 +259,7 @@ class OrderCreatePage(QWidget):
             }
 
             QLabel[objectName="productDetails"] {
-                font-size: 12px;
+                font-size: 11px;
                 color: #64748b;
                 margin: 0;
                 padding: 2px 0;
@@ -309,32 +321,32 @@ class OrderCreatePage(QWidget):
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                     stop:0 #ffffff, stop:1 #f8fafc);
                 border: 2px solid #e2e8f0;
-                border-radius: 16px;
-                margin: 8px 0;
+                border-radius: 12px;
+                margin: 4px 0;
             }
 
             QLabel#summaryTitle {
-                font-size: 18px;
+                font-size: 12px;
                 font-weight: 700;
                 color: #1e293b;
                 margin: 0;
-                padding: 0 0 8px 0;
+                padding: 0 0 4px 0;
             }
 
             QLabel#summaryMain {
-                font-size: 16px;
-                font-weight: 700;
+                font-size: 13px;
+                font-weight: 600;
                 color: #1e293b;
                 margin: 0;
-                padding: 4px 0;
+                padding: 2px 0;
             }
 
             QLabel#summaryDetails {
-                font-size: 13px;
+                font-size: 11px;
                 color: #64748b;
                 margin: 0;
-                padding: 4px 0;
-                line-height: 1.4;
+                padding: 2px 0;
+                line-height: 1.2;
             }
 
             /* כפתורים */
@@ -389,6 +401,35 @@ class OrderCreatePage(QWidget):
                 background: #f1f5f9;
                 transform: translateY(0px);
             }
+        
+                           
+             /* תגיות מצב */
+            QLabel#oosBadge {
+                padding: 2px 10px;
+                border-radius: 999px;
+                font-size: 11px;
+                font-weight: 800;
+                color: #ffffff;
+                background: #ef4444; /* אדום */
+                margin-bottom: 4px;
+            }
+
+            QLabel#mutedBadge {
+                padding: 2px 10px;
+                border-radius: 999px;
+                font-size: 11px;
+                font-weight: 800;
+                color: #ffffff;
+                background: #94a3b8; /* אפור */
+                margin-bottom: 4px;
+            }
+
+            /* כרטיס של פריט אזל – מעט דהוי */
+            QWidget[objectName="ProductCard"][outOfStock="true"] {
+                opacity: 0.75;
+                border-color: #fecaca; /* טיפה אדמדם */
+            }
+
         """)
 
     def _load_products(self):
@@ -411,8 +452,8 @@ class OrderCreatePage(QWidget):
         stock = product.get("stock", 0)
         price = product.get("price", 0)
         
-        if stock <= 0 or price <= 0:
-            return
+        out_of_stock = (stock <= 0)
+        price_missing = (price <= 0)
             
         min_qty = max(1, product.get("min_qty", 1))
         product_id = product["id"]
@@ -421,18 +462,19 @@ class OrderCreatePage(QWidget):
         card = QWidget()
         card.setObjectName("ProductCard")
         main_layout = QVBoxLayout(card)
-        main_layout.setContentsMargins(20, 16, 20, 16)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
 
         # חלק עליון - תמונה ופרטים
         top_row = QHBoxLayout()
-        top_row.setSpacing(16)
+        top_row.setSpacing(12)
 
         # תמונה
         img_label = QLabel()
         img_label.setObjectName("productImage")
-        img_label.setFixedSize(80, 80)
+        img_label.setFixedSize(64, 64)
         img_label.setAlignment(Qt.AlignCenter)
+        
         
         if product.get("image_url"):
             try:
@@ -458,6 +500,15 @@ class OrderCreatePage(QWidget):
         details_label = QLabel(f"מלאי: {stock} יח׳ • מינימום: {min_qty} יח׳")
         details_label.setObjectName("productDetails")
         
+        bad_reasons = []
+        if out_of_stock:
+            bad_reasons.append("אזל מהמלאי")
+        if price_missing:
+            bad_reasons.append("מחיר חסר")
+        if bad_reasons:
+            details_label.setText(f"מלאי: {stock} יח׳ • מינימום: {min_qty} יח׳ — " + " / ".join(bad_reasons))
+        
+
         info_layout.addWidget(name_label)
         info_layout.addWidget(price_label)
         info_layout.addWidget(details_label)
@@ -465,6 +516,17 @@ class OrderCreatePage(QWidget):
 
         top_row.addWidget(img_label)
         top_row.addLayout(info_layout, 1)
+        
+        # תגיות מצב עליונות (אם צריך)
+        if out_of_stock:
+            oos_badge = QLabel("אזל מהמלאי")
+            oos_badge.setObjectName("oosBadge")
+            info_layout.addWidget(oos_badge)
+
+        if price_missing:
+            missing_badge = QLabel("מחיר חסר")
+            missing_badge.setObjectName("mutedBadge")
+            info_layout.addWidget(missing_badge)
 
         # חלק תחתון - בחירה וכמות
         bottom_row = QHBoxLayout()
@@ -472,8 +534,13 @@ class OrderCreatePage(QWidget):
         
         checkbox = QCheckBox("הוסף להזמנה")
         qty_input = SimpleQuantityInput(minimum=min_qty, maximum=stock, value=min_qty)
-        qty_input.setEnabledEditing(False)
+        qty_input.setEnabledEditing(True)
         
+        if out_of_stock or price_missing:
+            checkbox.setEnabled(False)
+            qty_input.setEnabledEditing(False)
+            checkbox.setToolTip("לא ניתן להזמין את הפריט כרגע")
+
         bottom_row.addWidget(checkbox)
         bottom_row.addStretch()
         bottom_row.addWidget(qty_input)

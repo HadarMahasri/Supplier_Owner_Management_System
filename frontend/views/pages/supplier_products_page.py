@@ -50,6 +50,7 @@ class ImageUploadThread(QThread):
                     name=self.product_data["name"],
                     price=self.product_data["price"],
                     min_qty=self.product_data["min_qty"],
+                    stock=self.product_data["stock"],
                     image_path=self.image_path
                 )
             else:
@@ -169,6 +170,9 @@ class ProductEditForm(QWidget):
         min_label.setObjectName("FieldLabel")
         form.addRow(min_label, self.min_edit)
         
+        stock_label = QLabel("כמות במלאי")
+        stock_label.setObjectName("FieldLabel")
+        form.addRow(stock_label, self.stock_edit)
 
         form.addRow(lab("תמונת המוצר"), self.img_path_label)
         form.addRow("", self._as_widget(img_row))
@@ -306,6 +310,7 @@ class ProductEditForm(QWidget):
             "name": name,
             "price": price,
             "min_qty": int(self.min_edit.value()),
+            "stock": int(self.stock_edit.value()),
             "image_path": (self._selected_image_path if self._selected_image_path and os.path.exists(self._selected_image_path) else None),
         }
 
@@ -693,7 +698,8 @@ class SupplierProductsPage(QWidget):
                     "supplier_id": self.supplier_id,
                     "name": payload["name"],
                     "price": payload["price"],
-                    "min_qty": payload["min_qty"]
+                    "min_qty": payload["min_qty"],
+                    "stock": payload["stock"]
                 })
                 self._add_new_product_to_list(created)
                 
@@ -740,7 +746,7 @@ class SupplierProductsPage(QWidget):
                 "name": payload["name"],        # ← ישירות מהטופס
                 "price": payload["price"],      # ← ישירות מהטופס  
                 "min_qty": payload["min_qty"],  # ← ישירות מהטופס
-                "stock": p.stock,      
+                "stock": payload["stock"],     
                 "image_url": p.image_url,       # שמירה על התמונה הקיימת
             }
 
@@ -750,6 +756,7 @@ class SupplierProductsPage(QWidget):
             p.name = updated["name"]
             p.price = float(updated["price"])
             p.min_qty = int(updated["min_qty"])
+            p.stock = int(updated["stock"])
 
             # אם יש תמונה חדשה
             if image_path:

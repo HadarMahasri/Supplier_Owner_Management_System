@@ -8,6 +8,7 @@ class ProductCreate(BaseModel):
     name: NameStr
     price: float = Field(ge=0)
     min_qty: int = Field(ge=0)
+    stock: int = Field(ge=0, default=0) 
     image_url: Optional[str] = None
 
 class ProductWithImageCreate(BaseModel):

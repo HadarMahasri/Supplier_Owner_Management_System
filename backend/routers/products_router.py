@@ -60,7 +60,7 @@ def create_product(body: ProductCreate, db: Session = Depends(get_db)):
             unit_price=body.price,
             min_quantity=body.min_qty,
             image_url=body.image_url,
-            stock=0,
+            stock=getattr(body, 'stock', 0),
             is_active=True,
         )
         db.add(p)
@@ -77,6 +77,7 @@ async def create_product_with_image(
     name: str = Form(...),
     price: float = Form(...),
     min_qty: int = Form(...),
+    stock: int = Form(0),
     image: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db)
 ):
@@ -113,7 +114,7 @@ async def create_product_with_image(
             unit_price=price,
             min_quantity=min_qty,
             image_url=image_url,
-            stock=0,
+            stock=stock,
             is_active=True,
         )
         db.add(p)
@@ -142,6 +143,8 @@ def update_product(product_id: int, body: ProductUpdate, db: Session = Depends(g
         p.unit_price = body.price
     if body.min_qty is not None:
         p.min_quantity = body.min_qty
+    if body.stock is not None: 
+        p.stock = body.stock
     if body.image_url is not None:
         p.image_url = body.image_url
 
