@@ -34,7 +34,7 @@ class AuthService:
         }
         """
         try:
-            url = f"{API_BASE_URL}/api/v1/users/register"
+            url = f"{API_BASE_URL}/api/v1/gateway/users/register"  
             r = requests.post(url, json=payload, timeout=15)
             if r.status_code >= 400:
                 return False, None, _extract_error(r)
@@ -45,7 +45,7 @@ class AuthService:
 
     def verify_login(self, username: str, password: str, role: str) -> Tuple[bool, Optional[dict], Optional[str]]:
         try:
-            url = f"{API_BASE_URL}/api/v1/users/login"
+            url = f"{API_BASE_URL}/api/v1/gateway/users/login" 
             r = requests.post(url, json={"username": username, "password": password, "role": role}, timeout=10)
             if r.status_code >= 400:
                 return False, None, _extract_error(r)

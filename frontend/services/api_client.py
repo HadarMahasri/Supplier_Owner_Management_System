@@ -19,7 +19,7 @@ def _err(resp: requests.Response) -> str:
 # ---- Products API ----
 def get_products(supplier_id: int) -> List[Dict[str, Any]]:
     r = requests.get(
-        _url("/api/v1/products/"),
+        _url("/api/v1/gateway/products/"),
         params={"supplier_id": supplier_id},
         timeout=10,
     )
@@ -28,7 +28,7 @@ def get_products(supplier_id: int) -> List[Dict[str, Any]]:
     return r.json()
 
 def create_product(payload: Dict[str, Any]) -> Dict[str, Any]:
-    r = requests.post(_url("/api/v1/products"), json=payload, timeout=15)
+    r = requests.post(_url("/api/v1/gateway/products"), json=payload, timeout=15)
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
     return r.json()
@@ -59,7 +59,7 @@ def create_product_with_image(
     
     try:
         r = requests.post(
-            _url("/api/v1/products/with-image"),
+            _url("/api/v1/gateway/products/with-image"),
             data=data,
             files=files,
             timeout=30
@@ -74,7 +74,7 @@ def create_product_with_image(
             files["image"].close()
 
 def update_product(product_id: int, payload: Dict[str, Any]) -> Dict[str, Any]:
-    r = requests.put(_url(f"/api/v1/products/{product_id}"), json=payload, timeout=15)
+    r = requests.put(_url(f"/api/v1/gateway/products/{product_id}"), json=payload, timeout=15)
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
     return r.json()
@@ -90,7 +90,7 @@ def update_product_image(product_id: int, image_path: str) -> Dict[str, Any]:
         with open(image_path, "rb") as image_file:
             files = {"image": image_file}
             r = requests.put(
-                _url(f"/api/v1/products/{product_id}/image"),
+                _url(f"/api/v1/gateway/products/{product_id}/image"),
                 files=files,
                 timeout=30
             )
@@ -103,19 +103,19 @@ def update_product_image(product_id: int, image_path: str) -> Dict[str, Any]:
 
 def delete_product_image(product_id: int) -> Dict[str, Any]:
     """מחיקת תמונת מוצר"""
-    r = requests.delete(_url(f"/api/v1/products/{product_id}/image"), timeout=10)
+    r = requests.delete(_url(f"/api/v1/gateway/products/{product_id}/image"), timeout=10)
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
     return r.json()
 
 def update_stock(product_id: int, stock: int) -> Dict[str, Any]:
-    r = requests.put(_url(f"/api/v1/products/{product_id}/stock"), json={"stock": stock}, timeout=10)
+    r = requests.put(_url(f"/api/v1/gateway/products/{product_id}/stock"), json={"stock": stock}, timeout=10)
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
     return r.json()
 
 def delete_product(product_id: int) -> None:
-    r = requests.delete(_url(f"/api/v1/products/{product_id}"), timeout=10)
+    r = requests.delete(_url(f"/api/v1/gateway/products/{product_id}"), timeout=10)
     if r.status_code >= 400:
         raise RuntimeError(_err(r))
 
@@ -139,7 +139,7 @@ def upload_image_to_cloudinary(
         with open(image_path, "rb") as image_file:
             files = {"file": image_file}
             r = requests.post(
-                _url("/api/v1/images/products/upload"), 
+                _url("/api/v1/gateway/images/products/upload"), 
                 data=data, 
                 files=files, 
                 timeout=30

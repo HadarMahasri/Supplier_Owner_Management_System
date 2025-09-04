@@ -32,7 +32,7 @@ class StoreOwnerOrdersFetchThread(QThread):
         """טעינת הזמנות מהשרת"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/v1/orders/owner/{self.owner_id}",
+                f"{self.base_url}/api/v1/gateway/orders/owner/{self.owner_id}",
                 timeout=15
             )
             if response.status_code == 200:
@@ -52,7 +52,7 @@ class StoreOwnerOrdersService:
         """Get all orders for a specific store owner"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/v1/orders/owner/{owner_id}",
+                f"{self.base_url}/api/v1/gateway/orders/owner/{owner_id}",
                 timeout=15
             )
             if response.status_code == 200:
@@ -69,7 +69,7 @@ class StoreOwnerOrdersService:
         """
         try:
             response = requests.put(
-                f"{self.base_url}/api/v1/orders/{order_id}/status/owner",
+                f"{self.base_url}/api/v1/gateway/orders/{order_id}/status/owner",
                 json={"status": new_status},
                 params={"owner_id": owner_id},
                 timeout=10

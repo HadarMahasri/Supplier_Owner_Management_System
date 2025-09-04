@@ -4,6 +4,7 @@ API_BASE = os.getenv("API_BASE") or "http://127.0.0.1:8000"
 API_BASE = API_BASE.rstrip("/")
 if not API_BASE.endswith("/api/v1"):
     API_BASE = API_BASE + "/api/v1"
+API_BASE = API_BASE + "/gateway"   # ← הוספה
 
 def _url(path: str) -> str:
     # path צריך להתחיל ב-"/owner-links/..." וכד'

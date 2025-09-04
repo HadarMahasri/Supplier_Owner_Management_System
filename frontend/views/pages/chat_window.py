@@ -1,776 +1,546 @@
-# chat_window.py - גרסה חכמה עם השילוב החדש
-import sys, time, requests
-from typing import List, Dict
 from PySide6.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLineEdit,
-    QPushButton, QLabel, QMessageBox, QScrollArea, QSizePolicy, QProgressBar,
-    QTabWidget, QFrame, QCheckBox
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
+    QTextEdit, QLineEdit, QPushButton, QLabel, QScrollArea,
+    QFrame, QMessageBox
 )
-from PySide6.QtCore import Qt, QThread, Signal, QTimer
-from PySide6.QtGui import QTextCursor, QFont
+from PySide6.QtCore import Qt, Signal, QThread, QTimer
+from PySide6.QtGui import QFont, QPalette, QColor
+import requests
+import json
+from typing import Dict
+import os
+import time
 
-# תמיכה בהרצה ישירה מהתקייה frontend
-try:
-    from services.chat_context_client import fetch_ai_context
-except Exception:
-    import os
-    FRONTEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-    if FRONTEND_DIR not in sys.path:
-        sys.path.insert(0, FRONTEND_DIR)
-    from services.chat_context_client import fetch_ai_context
-
-API_BASE_URL = "http://127.0.0.1:8000"
-STREAM_URL = f"{API_BASE_URL}/api/v1/ai/stream"
-SUGGESTIONS_URL = f"{API_BASE_URL}/api/v1/ai/smart-suggestions"
-INSIGHTS_URL    = f"{API_BASE_URL}/api/v1/ai/business-insights"
-
-# שאלות בסיסיות (נשארות כ-fallback)
-SUPPLIER_BASE_QUESTIONS = [
-    "כמה מוצרים פעילים יש לי?",
-    "אילו הזמנות פתוחות יש?", 
-    "אילו מוצרים במלאי נמוך?",
-    "כמה הרווחתי החודש?",
-    "אילו המוצרים הנמכרים ביותר?"
-]
-
-OWNER_BASE_QUESTIONS = [
-    "מה המצב של ההזמנות שלי?",
-    "מאיזה ספק כדאי להזמין?",
-    "כמה הוצאתי החודש?", 
-    "מתי תגיע ההזמנה שלי?",
-    "איך להזמין שוב את אותם מוצרים?"
-]
-
-class SmartSuggestionsWorker(QThread):
-    """Worker לקבלת הצעות שאלות חכמות מהשרת"""
-    suggestions_ready = Signal(list)
-    insights_ready = Signal(dict)
-    failed = Signal(str)
-
-    def __init__(self, user_id: int):
+class ChatRequestThread(QThread):
+    """Thread לשליחת בקשות צ'אט עם נתוני משתמש"""
+    response_received = Signal(dict)
+    error_occurred = Signal(str)
+    
+    def __init__(self, user_id: int, message: str, api_url: str, timeout: int = 180, user_data: dict = None):
         super().__init__()
         self.user_id = user_id
+        self.message = message
+        self.api_url = api_url
+        self.timeout = timeout
+        self.start_time = None
+        self.user_data = user_data or {}
 
+    
     def run(self):
         try:
-            # קבלת הצעות שאלות חכמות
-            try:
-                r = requests.get(SUGGESTIONS_URL, params={"user_id": self.user_id}, timeout=5)
-                if r.status_code == 200:
-                    suggestions = r.json().get("suggestions", [])
-                    self.suggestions_ready.emit(suggestions)
-            except:
-                pass  # אם לא עובד, נשתמש ב-fallback
+            self.start_time = time.time()
+            # שליחת בקשה עם נתוני המשתמש
+            payload = {
+                "user_id": self.user_id,
+                "message": self.message,
+                "user_context": self.user_data  # נתוני המשתמש המלאים
+            }
             
-            # קבלת תובנות עסקיות
-            try:
-                r = requests.get(INSIGHTS_URL, params={"user_id": self.user_id}, timeout=5)
-                if r.status_code == 200:
-                    insights = r.json()
-                    self.insights_ready.emit(insights)
-            except:
-                pass  # אם לא עובד, פשוט לא נציג תובנות
+            response = requests.post(
+                f"{self.api_url}/api/v1/gateway/chat/message",
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            if response.status_code == 200:
+                # הוספת זמן תגובה לנתונים
+                response_data = response.json()
+                response_data["response_time"] = round(time.time() - self.start_time, 2)
+                self.response_received.emit(response_data)
+            else:
+                self.error_occurred.emit(f"שגיאה בשרת: {response.status_code}")
                 
         except Exception as e:
-            self.failed.emit(str(e))
+            self.error_occurred.emit(f"שגיאת תקשורת: {str(e)}")
 
-class FastStreamWorker(QThread):
-    chunk = Signal(str)
-    finished = Signal(float)
-    failed = Signal(str)
-    progress = Signal(int)
-
-    def __init__(self, url: str, question: str, user_id: int):
-        super().__init__()
-        self.url = url
-        self.question = question
-        self.user_id = user_id
-
-    def run(self):
-        t0 = time.time()
-        chunks_received = 0
+class TypingIndicator(QLabel):
+    """אינדיקטור כתיבה עם 3 נקודות מתנועעות"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.base_text = "כותב תשובה"
+        self.dots = 0
+        self.max_dots = 3
         
-        try:
-            with requests.get(
-                self.url,
-                params={"question": self.question, "user_id": self.user_id},
-                stream=True, 
-                timeout=(5, 120)  # timeout יותר ארוך למערכת החכמה
-            ) as r:
-                r.raise_for_status()
-                
-                for chunk in r.iter_content(chunk_size=None, decode_unicode=True):
-                    if chunk:
-                        self.chunk.emit(chunk)
-                        chunks_received += 1
-                        if chunks_received % 2 == 0:
-                            self.progress.emit(min(chunks_received * 3, 95))
-                            
-            self.finished.emit(time.time() - t0)
-            
-        except requests.exceptions.Timeout:
-            self.failed.emit("התגובה החכמה אורכת יותר זמן מהרגיל. אנא המתן...")
-        except requests.exceptions.ConnectionError:
-            self.failed.emit("בעיה בחיבור לשרת AI. בדוק שהשרת פועל.")
-        except Exception as e:
-            self.failed.emit(f"שגיאה: {str(e)}")
-
-class EnhancedChatWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("🧠 AI Chat חכם - מערכת ניהול ספקים")
-        self.resize(1100, 720)
-        self.user_id = None
-        self.role = None
-        self.username = None
-        self.snapshot = ""
-        self._busy = False
-        self.smart_suggestions = []
-        self.business_insights = {}
+        # Timer לאנימציה
+        self.animation_timer = QTimer()
+        self.animation_timer.timeout.connect(self.update_dots)
+        self.animation_timer.start(500)  # עדכון כל חצי שנייה
         
-        self._build_ui()
-        self._style()
-        
-        self.timeout_timer = QTimer()
-        self.timeout_timer.timeout.connect(self._force_stop)
-        
-    def _build_ui(self):
-        root = QVBoxLayout(self)
-        root.setContentsMargins(16,16,16,16)
-        root.setSpacing(12)
-        self.setLayoutDirection(Qt.RightToLeft)
-
-        # כותרת משופרת
-        header = QHBoxLayout()
-        title = QLabel("🧠 צ'אט AI חכם")
-        title.setStyleSheet("font-size:18px; font-weight:bold; color:#047857;")
-        header.addWidget(title)
-        header.addStretch()
-        
-        self.ai_status = QLabel("🤖 מערכת AI מוכנה")
-        self.ai_status.setStyleSheet("color:#047857; font-size:13px; font-weight:bold;")
-        header.addWidget(self.ai_status)
-        root.addLayout(header)
-
-        # שורת משתמש משופרת
-        user_frame = QFrame()
-        user_frame.setFrameStyle(QFrame.StyledPanel)
-        user_layout = QHBoxLayout(user_frame)
-        
-        user_layout.addWidget(QLabel("🆔 משתמש:"))
-        self.user_in = QLineEdit(placeholderText="הזן user_id")
-        self.user_in.setFixedWidth(100)
-        
-        load_btn = QPushButton("🔄 טען")
-        load_btn.setFixedWidth(80)
-        load_btn.clicked.connect(self._load_user_smart)
-        
-        user_layout.addWidget(self.user_in)
-        user_layout.addWidget(load_btn)
-        user_layout.addStretch()
-        
-        self.user_info = QLabel("—")
-        self.user_info.setAlignment(Qt.AlignRight)
-        user_layout.addWidget(self.user_info)
-        
-        root.addWidget(user_frame)
-
-        # Progress bar מעוצב
-        self.progress = QProgressBar()
-        self.progress.setVisible(False)
-        self.progress.setStyleSheet("""
-            QProgressBar { border-radius: 8px; text-align: center; border: 1px solid #047857; }
-            QProgressBar::chunk { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #059669, stop:1 #047857); border-radius: 7px; }
+        # הגדרת סטיילינג
+        self.setStyleSheet("""
+            color: #6b7280;
+            font-size: 14px;
+            font-style: italic;
+            padding: 5px;
         """)
-        root.addWidget(self.progress)
+        
+        self.update_dots()
+    
+    def update_dots(self):
+        """עדכון מספר הנקודות"""
+        self.dots = (self.dots + 1) % (self.max_dots + 1)
+        dots_str = "." * self.dots
+        self.setText(f"{self.base_text}{dots_str}")
+    
+    def stop_animation(self):
+        """עצירת האנימציה"""
+        if self.animation_timer.isActive():
+            self.animation_timer.stop()
 
-        # תצוגה ראשית עם טאבים
-        self.tabs = QTabWidget()
+class ChatBubble(QFrame):
+    """בועת צ'אט"""
+    def __init__(self, message: str, is_user: bool = True, response_time: float = None):
+        super().__init__()
+        self.setup_ui(message, is_user, response_time)
+    
+    def setup_ui(self, message: str, is_user: bool, response_time: float = None):
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 5, 10, 5)
         
-        # טאב צ'אט
-        chat_widget = QWidget()
-        chat_layout = QHBoxLayout(chat_widget)
+        # יצירת הבועה
+        bubble = QFrame()
+        bubble.setMaximumWidth(450)  # הגדלתי קצת לטקסט ארוך יותר
+        bubble.setObjectName("userBubble" if is_user else "botBubble")
         
-        # פאנל שאלות חכמות (ימין)
-        self._build_smart_questions_panel(chat_layout)
+        bubble_layout = QVBoxLayout(bubble)
+        bubble_layout.setContentsMargins(15, 10, 15, 10)
         
-        # אזור השיחה (שמאל)
-        self.view = QTextEdit(readOnly=True)
-        self.view.setPlaceholderText("🧠 צ'אט חכם מוכן! טען משתמש כדי להתחיל לקבל תובנות עסקיות...")
-        chat_layout.addWidget(self.view, 2)
+        # תווית עם ההודעה
+        message_label = QLabel(message)
+        message_label.setWordWrap(True)
+        message_label.setAlignment(Qt.AlignRight if is_user else Qt.AlignLeft)
+        bubble_layout.addWidget(message_label)
         
-        self.tabs.addTab(chat_widget, "💬 צ'אט")
+        # הוספת זמן תגובה אם זה הודעת בוט
+        if not is_user and response_time is not None:
+            time_label = QLabel(f"נענה תוך {response_time} שניות")
+            time_label.setStyleSheet("""
+                color: #9ca3af;
+                font-size: 11px;
+                font-style: italic;
+                margin-top: 5px;
+            """)
+            time_label.setAlignment(Qt.AlignLeft)
+            bubble_layout.addWidget(time_label)
         
-        # טאב תובנות עסקיות
-        insights_widget = QWidget() 
-        insights_layout = QVBoxLayout(insights_widget)
-        
-        insights_layout.addWidget(QLabel("📊 תובנות עסקיות"))
-        self.insights_display = QTextEdit(readOnly=True)
-        self.insights_display.setPlaceholderText("תובנות עסקיות יופיעו כאן אחרי טעינת המשתמש...")
-        insights_layout.addWidget(self.insights_display)
-        
-        refresh_insights = QPushButton("🔄 רענן תובנות")
-        refresh_insights.clicked.connect(self._refresh_insights)
-        insights_layout.addWidget(refresh_insights)
-        
-        self.tabs.addTab(insights_widget, "📊 תובנות")
-        
-        root.addWidget(self.tabs, 1)
+        # יישור הבועה
+        if is_user:
+            layout.addStretch()
+            layout.addWidget(bubble)
+        else:
+            layout.addWidget(bubble)
+            layout.addStretch()
 
-        # שורת קלט משופרת
-        input_frame = QFrame()
-        input_frame.setFrameStyle(QFrame.StyledPanel)
-        input_layout = QHBoxLayout(input_frame)
+class ResponseTimer(QLabel):
+    """מונה זמן תגובה"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.start_time = None
+        self.elapsed_seconds = 0
         
-        self.send_btn = QPushButton("🚀")
-        self.send_btn.setFixedWidth(50)
-        self.send_btn.clicked.connect(self._send_smart)
+        # Timer לעדכון הזמן
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_time)
         
-        self.input = QLineEdit(placeholderText="שאל שאלה או בקש עזרה...")
-        self.input.returnPressed.connect(self._send_smart)
+        # הגדרת סטיילינג
+        self.setStyleSheet("""
+            background-color: #f3f4f6;
+            color: #4b5563;
+            border: 1px solid #e5e7eb;
+            border-radius: 15px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 500;
+        """)
         
-        self.auto_suggestions = QCheckBox("הצעות אוטו")
-        self.auto_suggestions.setChecked(True)
-        
-        clear_btn = QPushButton("🗑️")
-        clear_btn.setFixedWidth(40)
-        clear_btn.clicked.connect(self._clear_chat)
-        
-        input_layout.addWidget(self.send_btn)
-        input_layout.addWidget(self.input, 1)
-        input_layout.addWidget(self.auto_suggestions)
-        input_layout.addWidget(clear_btn)
-        
-        root.addWidget(input_frame)
+        self.setAlignment(Qt.AlignCenter)
+        self.hide()  # מוסתר בתחילה
+    
+    def start_timer(self):
+        """התחלת מדידת הזמן"""
+        self.start_time = time.time()
+        self.elapsed_seconds = 0
+        self.show()
+        self.timer.start(100)  # עדכון כל עשירית שנייה
+        self.update_time()
+    
+    def stop_timer(self):
+        """עצירת המדידה"""
+        if self.timer.isActive():
+            self.timer.stop()
+        self.hide()
+    
+    def update_time(self):
+        """עדכון התצוגה"""
+        if self.start_time:
+            self.elapsed_seconds = time.time() - self.start_time
+            self.setText(f"⏱️ {self.elapsed_seconds:.1f} שניות")
 
-        # סטטוס מפורט
-        self.status = QLabel("")
-        self.status.setStyleSheet("color:#666; font-size:11px; padding:5px;")
-        root.addWidget(self.status)
-
-    def _build_smart_questions_panel(self, parent_layout):
-        """בונה פאנל שאלות חכמות"""
-        panel = QWidget()
-        panel.setFixedWidth(320)
-        panel_layout = QVBoxLayout(panel)
+class ChatWindow(QMainWindow):
+    """חלון הצ'אט הראשי"""
+    
+    def __init__(self, user_id: int, api_url: str = "http://localhost:8000"):
+        super().__init__()
+        self.user_id = user_id
+        self.api_url = api_url
+        self.typing_indicator = None
+        self.response_timer = None
+        
+        self.setup_ui()
+        self.setup_styles()
+        self.load_user_info()
+        
+        # הגדרות API
+        self.api_url = api_url or os.getenv("API_BASE_URL", "http://localhost:8000").rstrip("/")
+        self.chat_timeout = int(os.getenv("CHAT_UI_TIMEOUT", "180"))
+    
+    def setup_ui(self):
+        """הגדרת ממשק המשתמש"""
+        self.setWindowTitle("צ'אט עם העוזר הדיגיטלי")
+        self.setMinimumSize(500, 600)
+        self.resize(650, 750)
+        
+        # Widget מרכזי
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        
+        main_layout = QVBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
         
         # כותרת
-        panel_title = QLabel("🧠 שאלות חכמות")
-        panel_title.setAlignment(Qt.AlignCenter)
-        panel_title.setStyleSheet("font-weight:bold; color:#047857; font-size:14px; padding:5px;")
-        panel_layout.addWidget(panel_title)
+        header = QFrame()
+        header.setObjectName("header")
+        header.setFixedHeight(80)
         
-        # אזור הצעות דינמיות
-        self.dynamic_suggestions = QLabel("טוען הצעות חכמות...")
-        self.dynamic_suggestions.setAlignment(Qt.AlignCenter)
-        self.dynamic_suggestions.setStyleSheet("color:#666; font-style:italic; padding:10px;")
-        panel_layout.addWidget(self.dynamic_suggestions)
+        header_layout = QVBoxLayout(header)
+        header_layout.setContentsMargins(20, 10, 20, 10)
         
-        # scroll area לשאלות
-        self.smart_scroll = QScrollArea()
-        self.smart_scroll.setWidgetResizable(True)
-        self.smart_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.title_label = QLabel("💬 העוזר הדיגיטלי שלך")
+        self.title_label.setObjectName("titleLabel")
         
-        self.smart_container = QWidget()
-        self.smart_layout = QVBoxLayout(self.smart_container)
-        self.smart_layout.setContentsMargins(5,5,5,5)
-        self.smart_layout.setSpacing(8)
+        self.user_info_label = QLabel("טוען מידע...")
+        self.user_info_label.setObjectName("userInfoLabel")
         
-        self.smart_scroll.setWidget(self.smart_container)
-        panel_layout.addWidget(self.smart_scroll, 1)
+        header_layout.addWidget(self.title_label)
+        header_layout.addWidget(self.user_info_label)
         
-        # כפתור רענון הצעות
-        refresh_btn = QPushButton("🔄 רענן הצעות")
-        refresh_btn.clicked.connect(self._refresh_suggestions)
-        panel_layout.addWidget(refresh_btn)
+        main_layout.addWidget(header)
         
-        parent_layout.addWidget(panel, 0)
-
-    def _style(self):
+        # אזור ההודעות
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        scroll_area.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        
+        self.messages_container = QWidget()
+        self.messages_layout = QVBoxLayout(self.messages_container)
+        self.messages_layout.setContentsMargins(10, 10, 10, 10)
+        self.messages_layout.setSpacing(12)
+        
+        scroll_area.setWidget(self.messages_container)
+        main_layout.addWidget(scroll_area, 1)
+        
+        # אזור הכתיבה עם מונה זמן
+        input_section = QVBoxLayout()
+        input_section.setSpacing(5)
+        
+        # מונה זמן תגובה
+        self.response_timer = ResponseTimer()
+        timer_layout = QHBoxLayout()
+        timer_layout.addStretch()
+        timer_layout.addWidget(self.response_timer)
+        timer_layout.addStretch()
+        input_section.addLayout(timer_layout)
+        
+        # שורת הקלט
+        input_frame = QFrame()
+        input_frame.setObjectName("inputFrame")
+        input_frame.setFixedHeight(80)
+        
+        input_layout = QHBoxLayout(input_frame)
+        input_layout.setContentsMargins(15, 15, 15, 15)
+        input_layout.setSpacing(10)
+        
+        self.message_input = QLineEdit()
+        self.message_input.setObjectName("messageInput")
+        self.message_input.setPlaceholderText("כתוב את שאלתך כאן...")
+        self.message_input.returnPressed.connect(self.send_message)
+        
+        self.send_button = QPushButton("שלח")
+        self.send_button.setObjectName("sendButton")
+        self.send_button.clicked.connect(self.send_message)
+        
+        input_layout.addWidget(self.message_input)
+        input_layout.addWidget(self.send_button)
+        
+        input_section.addWidget(input_frame)
+        main_layout.addLayout(input_section)
+        
+        # הוספת הודעת ברוכים הבאים
+        self.add_welcome_message()
+    
+    def setup_styles(self):
+        """הגדרת העיצוב"""
         self.setStyleSheet("""
-            QWidget { 
-                background-color: #f8fafc;
-                font-family: 'Segoe UI', 'Arial';
+            QMainWindow {
+                background-color: #f5f7fa;
             }
-            QTextEdit { 
-                background:#ffffff; 
-                border:2px solid #047857; 
-                border-radius:12px; 
-                padding:12px; 
-                font-size:14px;
-                line-height:1.4;
+            
+            QFrame#header {
+                background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                    stop:0 #667eea, stop:1 #764ba2);
+                border: none;
             }
-            QLineEdit { 
-                background:#ffffff; 
-                border:2px solid #047857; 
-                border-radius:10px; 
-                padding:12px; 
-                font-size:14px; 
-            }
-            QLineEdit:focus { 
-                border-color:#059669; 
-                background:#f0fdf4;
-            }
-            QPushButton { 
-                border:none; 
-                border-radius:10px; 
-                padding:10px 16px; 
-                background:#047857; 
-                color:#fff; 
-                font-weight:bold;
-                font-size:13px;
-            }
-            QPushButton:hover { 
-                background:#059669; 
-                transform: scale(1.05);
-            }
-            QPushButton.Smart { 
-                background:#f0fdf4; 
-                color:#047857; 
-                border:2px solid #047857; 
-                border-radius:10px; 
-                padding:10px 12px;
-                text-align: right;
-                font-weight: normal;
-            }
-            QPushButton.Smart:hover { 
-                background:#dcfce7; 
-                border-color:#059669;
-                color:#059669;
-            }
-            QFrame {
-                background:#ffffff;
-                border: 1px solid #e2e8f0;
-                border-radius: 8px;
-                padding: 5px;
-            }
-            QTabWidget::pane {
-                border: 2px solid #047857;
-                border-radius: 8px;
-                background: #ffffff;
-            }
-            QTabBar::tab {
-                background: #f1f5f9;
-                padding: 8px 16px;
-                margin: 2px;
-                border-radius: 6px;
-            }
-            QTabBar::tab:selected {
-                background: #047857;
+            
+            QLabel#titleLabel {
                 color: white;
+                font-size: 20px;
+                font-weight: bold;
+            }
+            
+            QLabel#userInfoLabel {
+                color: #e8f4fd;
+                font-size: 12px;
+            }
+            
+            QFrame#inputFrame {
+                background-color: white;
+                border-top: 1px solid #e1e8ed;
+                border-radius: 10px;
+                margin: 5px;
+            }
+            
+            QLineEdit#messageInput {
+                border: 2px solid #e1e8ed;
+                border-radius: 20px;
+                padding: 12px 18px;
+                font-size: 14px;
+                background-color: #f8f9fa;
+            }
+            
+            QLineEdit#messageInput:focus {
+                border-color: #667eea;
+                background-color: white;
+                outline: none;
+            }
+            
+            QPushButton#sendButton {
+                background-color: #667eea;
+                color: white;
+                border: none;
+                border-radius: 20px;
+                padding: 12px 24px;
+                font-weight: bold;
+                font-size: 14px;
+                min-width: 80px;
+            }
+            
+            QPushButton#sendButton:hover {
+                background-color: #5a67d8;
+            }
+            
+            QPushButton#sendButton:pressed {
+                background-color: #4c51bf;
+            }
+            
+            QPushButton#sendButton:disabled {
+                background-color: #9ca3af;
+            }
+            
+            QFrame[objectName="userBubble"] {
+                background-color: #667eea;
+                border-radius: 18px;
+                margin: 2px;
+            }
+            
+            QFrame[objectName="userBubble"] QLabel {
+                color: white;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            
+            QFrame[objectName="botBubble"] {
+                background-color: white;
+                border: 1px solid #e1e8ed;
+                border-radius: 18px;
+                margin: 2px;
+            }
+            
+            QFrame[objectName="botBubble"] QLabel {
+                color: #1a202c;
+                font-size: 14px;
+                line-height: 1.4;
+            }
+            
+            QScrollArea {
+                border: none;
+                background-color: transparent;
             }
         """)
-
-    def _load_user_smart(self):
-        """טעינת משתמש עם מערכת חכמה"""
-        text = self.user_in.text().strip()
-        if not text.isdigit():
-            QMessageBox.warning(self, "שגיאה", "נא להזין user_id מספרי.")
-            return
-            
-        uid = int(text)
-        self.ai_status.setText("🔄 טוען פרופיל...")
-        
+    
+    def load_user_info(self):
+        """טעינת מידע המשתמש"""
         try:
-            start_time = time.time()
-            
-            # טעינת context בסיסי
-            ctx = fetch_ai_context(uid)
-            load_time = time.time() - start_time
-            
-            self.user_id = ctx.get("user_id")
-            self.username = ctx.get("username") or ""
-            self.role = ctx.get("role")
-            self.snapshot = ctx.get("snapshot", "")
-            
-            # עדכון UI
-            self.user_info.setText(f"👤 {self.username} | {self.role} | ID: {self.user_id}")
-            self.view.setPlainText(self._format_snapshot())
-            
-            # טעינת שאלות חכמות ותובנות
-            self._load_smart_features()
-            
-            self.ai_status.setText(f"✅ מוכן ({load_time:.1f}s)")
-            self.input.setFocus()
-            
+            self.user_info_label.setText(f"משתמש ID: {self.user_id}")
         except Exception as e:
-            self.ai_status.setText("❌ שגיאה")
-            QMessageBox.critical(self, "שגיאה", f"טעינת משתמש נכשלה:\n{e}")
+            self.user_info_label.setText("משתמש לא מזוהה")
+    
+    def add_welcome_message(self):
+        """הוספת הודעת ברוכים הבאים"""
+        welcome_text = """שלום! אני העוזר הדיגיטלי שלך במערכת הספקים.
 
-    def _format_snapshot(self) -> str:
-        """פורמט מהיר לSnapshot"""
-        lines = self.snapshot.split('\n')
-        formatted = "🧠 === פרופיל המשתמש החכם ===\n\n"
+אני כאן כדי לענות על שאלותיך ולעזור לך עם:
+• ניהול מוצרים ומלאי
+• ביצוע והזמנות ומעקב
+• יצירת קשרים עם ספקים/בעלי חנויות
+• שאלות כלליות על המערכת
+
+פשוט כתוב את שאלתך ואני אעזור לך!"""
         
-        for line in lines:
-            if line.strip():
-                if line.startswith('===') or line.startswith('---'):
-                    formatted += f"\n📋 {line.replace('=', '').strip()}\n"
-                elif any(keyword in line for keyword in ['KPIs:', 'סטטיסטיקות:', 'ביצועים:']):
-                    formatted += f"📊 {line}\n"
-                elif any(keyword in line for keyword in ['הזמנות', 'מוצרים', 'ספקים']):
-                    formatted += f"• {line}\n"
-                else:
-                    formatted += f"{line}\n"
-        
-        return formatted + "\n💡 שאל שאלות או בחר מהצד הימני!\n"
-
-    def _load_smart_features(self):
-        """טוען תכונות חכמות (הצעות ותובנות)"""
-        self.dynamic_suggestions.setText("🔄 טוען הצעות חכמות...")
-        
-        # הפעל worker לתכונות חכמות
-        self.suggestions_worker = SmartSuggestionsWorker(self.user_id)
-        self.suggestions_worker.suggestions_ready.connect(self._update_smart_suggestions)
-        self.suggestions_worker.insights_ready.connect(self._update_insights)
-        self.suggestions_worker.failed.connect(self._handle_suggestions_failure)
-        self.suggestions_worker.start()
-
-    def _update_smart_suggestions(self, suggestions: List[str]):
-        """עדכון הצעות חכמות"""
-        self.smart_suggestions = suggestions
-        self._reload_smart_questions()
-        self.dynamic_suggestions.setText(f"💡 {len(suggestions)} הצעות חכמות")
-
-    def _update_insights(self, insights: Dict):
-        """עדכון תובנות עסקיות"""
-        self.business_insights = insights
-        self._display_insights()
-
-    def _handle_suggestions_failure(self, error: str):
-        """טיפול בכשל טעינת הצעות - fallback"""
-        self.dynamic_suggestions.setText("⚠️ משתמש בהצעות בסיסיות")
-        self._reload_basic_questions()
-
-    def _reload_smart_questions(self):
-        """טוען שאלות חכמות מהשרת"""
-        # נקה שאלות קודמות
-        for i in reversed(range(self.smart_layout.count())):
-            w = self.smart_layout.itemAt(i).widget()
-            if w: w.setParent(None)
-        
-        # הוסף קטגוריות שאלות
-        categories = {
-            "📊 מצב כללי": [],
-            "💰 כספים": [],
-            "📦 מוצרים/הזמנות": [],
-            "🔧 פעולות": []
-        }
-        
-        # סיווג השאלות לקטגוריות
-        for suggestion in self.smart_suggestions:
-            if any(word in suggestion for word in ["מצב", "סטטוס", "כמה"]):
-                categories["📊 מצב כללי"].append(suggestion)
-            elif any(word in suggestion for word in ["הכנס", "הוצא", "עלות", "מחיר", "רווח"]):
-                categories["💰 כספים"].append(suggestion)
-            elif any(word in suggestion for word in ["מוצר", "הזמנה", "מלאי", "ספק"]):
-                categories["📦 מוצרים/הזמנות"].append(suggestion)
-            else:
-                categories["🔧 פעולות"].append(suggestion)
-        
-        # הצג קטגוריות עם שאלות
-        for category, questions in categories.items():
-            if questions:
-                # כותרת קטגוריה
-                cat_label = QLabel(category)
-                cat_label.setStyleSheet("font-weight:bold; color:#047857; margin:5px 0px 2px 0px;")
-                self.smart_layout.addWidget(cat_label)
-                
-                # שאלות בקטגוריה
-                for q in questions[:4]:  # מגביל ל-4 שאלות לקטגוריה
-                    btn = self._create_smart_question_button(q)
-                    self.smart_layout.addWidget(btn)
-        
-        self.smart_layout.addStretch(1)
-
-    def _reload_basic_questions(self):
-        """טוען שאלות בסיסיות (fallback)"""
-        for i in reversed(range(self.smart_layout.count())):
-            w = self.smart_layout.itemAt(i).widget()
-            if w: w.setParent(None)
-            
-        basic_label = QLabel("⚡ שאלות בסיסיות")
-        basic_label.setStyleSheet("font-weight:bold; color:#047857; margin-bottom:5px;")
-        self.smart_layout.addWidget(basic_label)
-        
-        qs = SUPPLIER_BASE_QUESTIONS if self.role == "Supplier" else OWNER_BASE_QUESTIONS
-        for q in qs:
-            btn = self._create_smart_question_button(q)
-            self.smart_layout.addWidget(btn)
-            
-        self.smart_layout.addStretch(1)
-
-    def _create_smart_question_button(self, question: str) -> QPushButton:
-        """יוצר כפתור שאלה מעוצב"""
-        btn = QPushButton(question)
-        btn.setObjectName("Smart")
-        btn.setProperty("class", "Smart")
-        btn.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-        btn.setMinimumHeight(40)
-        btn.setWordWrap(True)
-        btn.clicked.connect(lambda _, t=question: self._quick_clicked(t))
-        return btn
-
-    def _display_insights(self):
-        """מציג תובנות עסקיות"""
-        insights = self.business_insights
-        if not insights:
+        bubble = ChatBubble(welcome_text.strip(), is_user=False)
+        self.messages_layout.addWidget(bubble)
+    
+    def send_message(self):
+        """שליחת הודעה"""
+        message = self.message_input.text().strip()
+        if not message:
             return
+        
+        # הוספת ההודעה למממשק
+        user_bubble = ChatBubble(message, is_user=True)
+        self.messages_layout.addWidget(user_bubble)
+        
+        # ניקוי שדה הקלט
+        self.message_input.clear()
+        
+        # נעילת הכפתור בזמן השליחה
+        self.send_button.setEnabled(False)
+        self.send_button.setText("שולח...")
+        
+        # הוספת אינדיקטור כתיבה
+        typing_layout = QHBoxLayout()
+        typing_frame = QFrame()
+        typing_frame.setObjectName("botBubble")
+        typing_frame.setMaximumWidth(200)
+        
+        frame_layout = QVBoxLayout(typing_frame)
+        frame_layout.setContentsMargins(15, 10, 15, 10)
+        
+        self.typing_indicator = TypingIndicator()
+        frame_layout.addWidget(self.typing_indicator)
+        
+        typing_layout.addWidget(typing_frame)
+        typing_layout.addStretch()
+        
+        typing_container = QWidget()
+        typing_container.setLayout(typing_layout)
+        self.messages_layout.addWidget(typing_container)
+        
+        # התחלת מונה הזמן
+        self.response_timer.start_timer()
+        
+        # גלילה למטה
+        self.scroll_to_bottom()
+        
+        # שליחת הבקשה לשרת
+        self.chat_thread = ChatRequestThread(self.user_id, message, self.api_url, timeout=self.chat_timeout)
+        self.chat_thread.response_received.connect(self.on_response_received)
+        self.chat_thread.error_occurred.connect(self.on_error_occurred)
+        self.chat_thread.start()
+    
+    def on_response_received(self, response: dict):
+        """טיפול בתגובה מהשרת"""
+        # עצירת מונה הזמן
+        self.response_timer.stop_timer()
+        
+        # הסרת אינדיקטור הכתיבה
+        if self.typing_indicator:
+            # מחיקת הwidget האחרון (אינדיקטור הכתיבה)
+            last_item = self.messages_layout.itemAt(self.messages_layout.count() - 1)
+            if last_item:
+                widget = last_item.widget()
+                if widget:
+                    self.messages_layout.removeWidget(widget)
+                    widget.setParent(None)
             
-        insights_text = "📊 תובנות עסקיות מתקדמות\n\n"
+            self.typing_indicator.stop_animation()
+            self.typing_indicator = None
         
-        # התראות
-        alerts = insights.get("alerts", [])
-        if alerts:
-            insights_text += "🚨 התראות:\n"
-            for alert in alerts:
-                insights_text += f"• {alert}\n"
-            insights_text += "\n"
-        
-        # המלצות
-        recommendations = insights.get("recommendations", [])
-        if recommendations:
-            insights_text += "💡 המלצות:\n"
-            for rec in recommendations:
-                insights_text += f"• {rec}\n"
-            insights_text += "\n"
-        
-        # הזדמנויות
-        opportunities = insights.get("opportunities", [])
-        if opportunities:
-            insights_text += "🎯 הזדמנויות:\n"
-            for opp in opportunities:
-                insights_text += f"• {opp}\n"
-            insights_text += "\n"
-        
-        self.insights_display.setPlainText(insights_text)
-
-    def _refresh_suggestions(self):
-        """רענון הצעות חכמות"""
-        if self.user_id:
-            self._load_smart_features()
-
-    def _refresh_insights(self):
-        """רענון תובנות עסקיות"""
-        if self.user_id:
-            self._load_smart_features()
-
-    def _quick_clicked(self, text: str):
-        """לחיצה על שאלה מהירה"""
-        self.input.setText(text)
-        self._send_smart()
-
-    def _send_smart(self):
-        """שליחה חכמה עם תכונות מתקדמות"""
-        if not self.user_id:
-            QMessageBox.information(self, "חסר משתמש", "טען קודם פרופיל משתמש.")
-            return
-        if self._busy: 
-            return
+        # הוספת התשובה
+        if response.get("success"):
+            bot_response = response.get("response", "מצטער, לא קיבלתי תשובה.")
+            response_time = response.get("response_time", 0)
+            dynamic_used = response.get("dynamic_context_used", False)  # חדש
             
-        q = self.input.text().strip()
-        if not q: 
-            return
-
-        # הוסף שאלה לצ'אט עם timestamp
-        timestamp = time.strftime("%H:%M")
-        self.view.append(f"\n[{timestamp}] 🤔 {self.username}: {q}")
-        self.input.clear()
-
-        # הכן לתגובה מהמערכת החכמה
-        self.view.append(f"<b>[{timestamp}] 🧠 AI חכם:</b> ")
-        self.view.moveCursor(QTextCursor.End)
-
-        # הפעל אינדיקטורים מתקדמים
-        self._set_smart_busy(True, "🧠 AI חכם חושב...")
-        self.progress.setVisible(True)
-        self.progress.setValue(15)
-        
-        # timeout ארוך יותר למערכת חכמה
-        self.timeout_timer.start(180000)  # 60 שניות
-
-        # צור worker
-        self.worker = FastStreamWorker(STREAM_URL, q, self.user_id)
-        self.worker.chunk.connect(self._on_smart_chunk)
-        self.worker.progress.connect(self._on_progress)
-        self.worker.finished.connect(self._on_smart_finished)
-        self.worker.failed.connect(self._on_smart_failed)
-        self.worker.start()
-
-    # 2) בכל chunk שמגיע - לאפס טיימר
-    def _on_smart_chunk(self, txt: str):
-        self.view.moveCursor(QTextCursor.End)
-        self.view.insertPlainText(txt)
-        self.view.ensureCursorVisible()
-        self.ai_status.setText("🧠 מקבל תגובה חכמה.")
-        self.timeout_timer.start(180000)  # איפוס הספירה בכל קבלת טקסט  :contentReference[oaicite:5]{index=5}
-
-    def _on_progress(self, value: int):
-        """עדכון התקדמות"""
-        self.progress.setValue(value)
-
-    def _on_smart_finished(self, dt: float):
-        """סיום תגובה חכמה"""
-        self.timeout_timer.stop()
-        self.view.append(f" <span style='color:#047857;font-weight:bold'>🧠({dt:.1f}s)</span>")
-        
-        # הערכת איכות התגובה
-        if dt < 3.0:
-            quality_msg = "🚀 תגובה מהירה וחכמה!"
-        elif dt < 6.0:
-            quality_msg = "🧠 תגובה חכמה!"
+            # אפשר להוסיף אינדיקטור ויזואלי
+            if dynamic_used:
+                bot_response += "\n💡 *תשובה מותאמת אישית עם נתוניך העדכניים*"
+            
+            bot_bubble = ChatBubble(bot_response, is_user=False, response_time=response_time)
+            self.messages_layout.addWidget(bot_bubble)
         else:
-            quality_msg = "✅ תגובה מקיפה"
-            
-        self.ai_status.setText(f"{quality_msg} {dt:.1f}s")
+            error_message = f"שגיאה: {response.get('message', 'שגיאה לא ידועה')}"
+            error_bubble = ChatBubble(error_message, is_user=False)
+            self.messages_layout.addWidget(error_bubble)
         
-        # רענון הצעות אוטומטי (אם מופעל)
-        if self.auto_suggestions.isChecked():
-            self._refresh_suggestions()
-            
-        self._set_smart_busy(False)
-
-    def _on_smart_failed(self, err: str):
-        """טיפול בכשלים"""
-        self.timeout_timer.stop()
-        self.view.append(f"\n❌ {err}")
+        # החזרת הכפתור למצב רגיל
+        self.send_button.setEnabled(True)
+        self.send_button.setText("שלח")
         
-        # הצעות מתקדמות לפתרון
-        if "זמן רב" in err or "timeout" in err.lower():
-            self.view.append("\n💡 המערכת החכמה צריכה יותר זמן לשאלות מורכבות. נסה:")
-            self.view.append("   • שאלה פשוטה יותר")
-            self.view.append("   • חלק שאלה מורכבת לכמה שאלות קטנות")
-        elif "חיבור" in err:
-            self.view.append("\n💡 בדוק:")
-            self.view.append("   • שהשרת FastAPI פועל")
-            self.view.append("   • ששירות Ollama פועל")
-            self.view.append("   • החיבור לאינטרנט תקין")
-            
-        self.ai_status.setText("❌ נכשל")
-        self._set_smart_busy(False)
-
-    def _force_stop(self):
-        if hasattr(self, 'worker') and self.worker.isRunning():
-            self.worker.terminate()
-            self.view.append(f"\n⏰ התגובה הופסקה אחרי 3 דקות.")
-            self.view.append("\n💡 אם זה קורה הרבה, כדאי לקצר את השאלה או לשפר אינדקסים/שאילתות.")
-            self.ai_status.setText("⏰ הופסק")
-            self._set_smart_busy(False)   # המקור קיים פה  :contentReference[oaicite:7]{index=7}
-
-
-    def _set_smart_busy(self, busy: bool, msg: str = ""):
-        """ניהול מצב עסוק חכם"""
-        self._busy = busy
-        self.send_btn.setEnabled(not busy)
-        self.input.setEnabled(not busy)
-        self.status.setText(msg if busy else "")
-        
-        if not busy:
-            self.progress.setVisible(False)
-            self.progress.setValue(0)
-            
-        QApplication.setOverrideCursor(Qt.WaitCursor if busy else Qt.ArrowCursor)
-
-    def _clear_chat(self):
-        """ניקוי צ'אט עם שמירת context"""
-        if self.snapshot:
-            self.view.setPlainText(self._format_snapshot())
-        else:
-            self.view.clear()
-            self.view.setPlainText("🧠 צ'אט נוקה. טען משתמש מחדש כדי להתחיל.")
-
-# ---- API Enhancement Functions ----
-
-def fetch_smart_suggestions(user_id: int) -> List[str]:
-    """מחזיר הצעות חכמות מהשרת החדש"""
-    try:
-        r = requests.get(f"{API_BASE_URL}/api/v1/ai/smart-suggestions", 
-                        params={"user_id": user_id}, timeout=8)
-        if r.status_code == 200:
-            return r.json().get("suggestions", [])
-    except:
-        pass
-    return []
-
-def fetch_business_insights(user_id: int) -> dict:
-    """מחזיר תובנות עסקיות"""
-    try:
-        r = requests.get(f"{API_BASE_URL}/api/v1/ai/business-insights", 
-                        params={"user_id": user_id}, timeout=8)
-        if r.status_code == 200:
-            return r.json()
-    except:
-        pass
-    return {}
-
-# ---- Main Application ----
-
-class SmartChatApp:
-    """מחלקת האפליקציה החכמה"""
+        # גלילה למטה
+        self.scroll_to_bottom()
     
-    def __init__(self):
-        self.app = QApplication(sys.argv)
-        self.window = EnhancedChatWindow()
-        self._setup_app()
+    def on_error_occurred(self, error: str):
+        """טיפול בשגיאה"""
+        # עצירת מונה הזמן
+        self.response_timer.stop_timer()
+        
+        # הסרת אינדיקטור הכתיבה
+        if self.typing_indicator:
+            last_item = self.messages_layout.itemAt(self.messages_layout.count() - 1)
+            if last_item:
+                widget = last_item.widget()
+                if widget:
+                    self.messages_layout.removeWidget(widget)
+                    widget.setParent(None)
+            
+            self.typing_indicator.stop_animation()
+            self.typing_indicator = None
+        
+        # הוספת הודעת שגיאה
+        error_message = f"שגיאה בתקשורת: {error}"
+        error_bubble = ChatBubble(error_message, is_user=False)
+        self.messages_layout.addWidget(error_bubble)
+        
+        # החזרת הכפתור למצב רגיל
+        self.send_button.setEnabled(True)
+        self.send_button.setText("שלח")
+        
+        # גלילה למטה
+        self.scroll_to_bottom()
     
-    def _setup_app(self):
-        """הגדרת האפליקציה"""
-        self.app.setApplicationName("Smart AI Chat")
-        self.app.setApplicationVersion("2.0")
-        self.app.setOrganizationName("Suppliers Management System")
-        
-        # הגדרת פונט גלובלי
-        font = QFont("Arial", 12)
-        self.app.setFont(font)
+    def scroll_to_bottom(self):
+        """גלילה לתחתית הצ'אט"""
+        QTimer.singleShot(100, lambda: self._do_scroll())
     
-    def run(self):
-        """הפעלת האפליקציה"""
-        self.window.show()
-        
-        # הודעת פתיחה
-        print("🧠 Smart AI Chat מופעל!")
-        print("📋 תכונות חדשות:")
-        print("  • הצעות שאלות חכמות")
-        print("  • תובנות עסקיות אוטומטיות") 
-        print("  • תגובות מתקדמות עם context עשיר")
-        print("  • ניתוח ביצועים בזמן אמת")
-        print("=" * 50)
-        
-        return self.app.exec()
+    def _do_scroll(self):
+        scroll_area = self.centralWidget().findChild(QScrollArea)
+        if scroll_area:
+            scroll_bar = scroll_area.verticalScrollBar()
+            scroll_bar.setValue(scroll_bar.maximum())
 
-# ---- Additional Utility Functions ----
-
-def test_smart_features(user_id: int = 1):
-    """פונקציית בדיקה למערכת החכמה"""
-    print(f"🧪 בודק תכונות חכמות עבור משתמש {user_id}...")
-    
-    try:
-        # בדיקת context
-        ctx = fetch_ai_context(user_id)
-        print(f"✅ Context: {ctx.get('role')} - {ctx.get('username')}")
-        
-        # בדיקת הצעות
-        suggestions = fetch_smart_suggestions(user_id)
-        print(f"✅ הצעות חכמות: {len(suggestions)} נמצאו")
-        
-        # בדיקת תובנות
-        insights = fetch_business_insights(user_id)
-        alerts_count = len(insights.get("alerts", []))
-        recommendations_count = len(insights.get("recommendations", []))
-        print(f"✅ תובנות: {alerts_count} התראות, {recommendations_count} המלצות")
-        
-        return True
-        
-    except Exception as e:
-        print(f"❌ שגיאה בבדיקה: {e}")
-        return False
-
+# דוגמה לשימוש
 if __name__ == "__main__":
-    # אפשרות להפעלה עם user_id ספציפי
-    if len(sys.argv) > 1 and sys.argv[1] == "test":
-        user_id = int(sys.argv[2]) if len(sys.argv) > 2 else 1
-        test_smart_features(user_id)
-    else:
-        app = SmartChatApp()
-        sys.exit(app.run())
+    from PySide6.QtWidgets import QApplication
+    import sys
+    
+    app = QApplication(sys.argv)
+    
+    # בדיקה פשוטה - צריך לקבל user_id אמיתי
+    chat_window = ChatWindow(user_id=1)
+    chat_window.show()
+    
+    sys.exit(app.exec())

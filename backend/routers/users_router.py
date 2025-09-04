@@ -7,6 +7,7 @@ from database.session import get_db
 from schemas.users import RegisterPayload, RegisterResponse, LoginPayload, LoginResponse
 from models.user_model import User
 from models.supplier_city_model import SupplierCity
+from sqlalchemy import text
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -111,3 +112,114 @@ def login(body: LoginPayload, db: Session = Depends(get_db)):
         "role": u.userType,
     }
     return LoginResponse(user=user)
+
+# הוסף את הקוד הזה לקובץ backend/routers/users_router.py
+
+@router.get("/profile/{user_id}")
+async def get_user_profile(user_id: int, db: Session = Depends(get_db)):
+    """קבלת פרופיל מלא של משתמש עבור הצ'אט AI"""
+    try:
+        # שאילתת המשתמש הבסיסית
+        user = db.execute(text("""
+            SELECT id, username, email, company_name, contact_name, phone, 
+                   city_id, street, house_number, opening_time, closing_time, userType
+            FROM users WHERE id = :user_id
+        """), {"user_id": user_id}).fetchone()
+        
+        if not user:
+            raise HTTPException(status_code=404, detail="משתמש לא נמצא")
+        
+        # בניית פרופיל בסיסי
+        user_profile = {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "company_name": user.company_name,
+            "contact_name": user.contact_name,
+            "phone": user.phone,
+            "city_id": user.city_id,
+            "street": user.street,
+            "house_number": user.house_number,
+            "opening_time": str(user.opening_time) if user.opening_time else None,
+            "closing_time": str(user.closing_time) if user.closing_time else None,
+            "userType": user.userType
+        }
+        
+        # נתונים ספציפיים לספק
+        if user.userType == "Supplier":
+            # מספר מוצרים פעילים
+            products_count = db.execute(text("""
+                SELECT COUNT(*) FROM products 
+                WHERE supplier_id = :user_id AND is_active = 1
+            """), {"user_id": user_id}).scalar()
+            
+            # הזמנות פעילות
+            active_orders = db.execute(text("""
+                SELECT COUNT(*) FROM orders 
+                WHERE supplier_id = :user_id AND status IN (N'בתהליך', N'בוצעה')
+            """), {"user_id": user_id}).scalar()
+            
+            # הזמנות שהושלמו השבוע
+            completed_this_week = db.execute(text("""
+                SELECT COUNT(*) FROM orders 
+                WHERE supplier_id = :user_id AND status = N'הושלמה' 
+                AND created_date >= DATEADD(day, -7, GETDATE())
+            """), {"user_id": user_id}).scalar()
+            
+            # מוצרים שאזלו מהמלאי
+            out_of_stock = db.execute(text("""
+                SELECT COUNT(*) FROM products 
+                WHERE supplier_id = :user_id AND stock = 0 AND is_active = 1
+            """), {"user_id": user_id}).scalar()
+            
+            user_profile.update({
+                "products_count": products_count,
+                "active_orders": active_orders,
+                "completed_orders_week": completed_this_week,
+                "out_of_stock_products": out_of_stock,
+                "role_specific_data": "supplier_data"
+            })
+            
+        # נתונים ספציפיים לבעל חנות
+        elif user.userType == "StoreOwner":
+            # הזמנות פעילות
+            active_orders = db.execute(text("""
+                SELECT COUNT(*) FROM orders 
+                WHERE owner_id = :user_id AND status IN (N'בתהליך', N'בוצעה')
+            """), {"user_id": user_id}).scalar()
+            
+            # הזמנות השבוע
+            orders_this_week = db.execute(text("""
+                SELECT COUNT(*) FROM orders 
+                WHERE owner_id = :user_id 
+                AND created_date >= DATEADD(day, -7, GETDATE())
+            """), {"user_id": user_id}).scalar()
+            
+            # ספקים מחוברים
+            connected_suppliers = db.execute(text("""
+                SELECT COUNT(*) FROM owner_supplier_links 
+                WHERE owner_id = :user_id AND status = 'APPROVED'
+            """), {"user_id": user_id}).scalar()
+            
+            # בקשות חיבור ממתינות
+            pending_requests = db.execute(text("""
+                SELECT COUNT(*) FROM owner_supplier_links 
+                WHERE owner_id = :user_id AND status = 'PENDING'
+            """), {"user_id": user_id}).scalar()
+            
+            user_profile.update({
+                "active_orders": active_orders,
+                "orders_this_week": orders_this_week,
+                "connected_suppliers": connected_suppliers,
+                "pending_supplier_requests": pending_requests,
+                "role_specific_data": "store_owner_data"
+            })
+        
+        return user_profile
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.error(f"Error fetching user profile: {e}")
+        raise HTTPException(status_code=500, detail="שגיאה בקבלת פרטי המשתמש")

@@ -32,7 +32,7 @@ class OrdersFetchThread(QThread):
         """טעינת הזמנות מהשרת"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/v1/orders/supplier/{self.supplier_id}",
+                f"{self.base_url}/api/v1/gateway/orders/supplier/{self.supplier_id}",
                 timeout=15
             )
             if response.status_code == 200:
@@ -52,7 +52,7 @@ class OrdersService:
         """Get all orders for a specific supplier"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/v1/orders/supplier/{supplier_id}",
+                f"{self.base_url}/api/v1/gateway/orders/supplier/{supplier_id}",
                 timeout=15
             )
             if response.status_code == 200:
@@ -66,7 +66,7 @@ class OrdersService:
         """Get all orders for a specific store owner"""
         try:
             response = requests.get(
-                f"{self.base_url}/api/v1/orders/owner/{owner_id}",
+                f"{self.base_url}/api/v1/gateway/orders/owner/{owner_id}",
                 timeout=15
             )
             if response.status_code == 200:
@@ -83,7 +83,7 @@ class OrdersService:
         """
         try:
             response = requests.put(
-                f"{self.base_url}/api/v1/orders/{order_id}/status",
+                f"{self.base_url}/api/v1/gateway/orders/{order_id}/status",
                 json={"status": new_status},
                 params={"supplier_id": supplier_id},
                 timeout=10
@@ -115,7 +115,7 @@ class OrdersService:
         """
         try:
             response = requests.put(
-                f"{self.base_url}/api/v1/orders/{order_id}/status/owner",
+                f"{self.base_url}/api/v1/gateway/orders/{order_id}/status/owner",
                 json={"status": new_status},
                 params={"owner_id": owner_id},
                 timeout=10
