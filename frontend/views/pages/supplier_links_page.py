@@ -477,7 +477,7 @@ class SupplierLinksPage(QWidget):
             /* עיצוב כרטיסיות ממתינות */
             QWidget[objectName="pendingCard"] {
                 background: #fff;
-                border: 1px solid #f59e0b;
+                border: 1px solid #228B22;
                 border-radius: 8px;
                 margin-bottom: 4px;
             }

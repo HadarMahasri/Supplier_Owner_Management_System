@@ -91,25 +91,10 @@ class StoreOwnerHome(QWidget):
         layout.setSpacing(12)
 
         # Actions - צד שמאל (הכפתורים בסדר: התנתק, רשימת הזמנות, הזמנה חדשה)
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(8)
-        
+                # כפתור התנתקות בצד שמאל
         logout_btn = QPushButton("התנתק")
         logout_btn.setObjectName("ghostBtn")
         logout_btn.clicked.connect(self.logout_requested.emit)
-        
-        orders_btn = QPushButton("רשימת הזמנות")
-        orders_btn.setObjectName("secondaryBtn")
-        orders_btn.clicked.connect(self.show_orders_page)
-        
-        new_order_btn = QPushButton("הזמנה חדשה")
-        new_order_btn.setObjectName("primaryBtn")
-        new_order_btn.clicked.connect(self.show_suppliers_page)
-
-        # סדר חדש: התנתק הכי שמאלי
-        actions_layout.addWidget(logout_btn)
-        actions_layout.addWidget(orders_btn)
-        actions_layout.addWidget(new_order_btn)
 
         # Title - במרכז
         company_name = self.user_data.get('company_name', '')
@@ -118,17 +103,33 @@ class StoreOwnerHome(QWidget):
         title.setObjectName("title")
         title.setAlignment(Qt.AlignCenter)
 
-        # Menu button - צד ימין
+        # כפתורי ניווט בצד ימין
+        nav_layout = QHBoxLayout()
+        nav_layout.setSpacing(8)
+
+        orders_btn = QPushButton("רשימת הזמנות")
+        orders_btn.setObjectName("secondaryBtn")
+        orders_btn.clicked.connect(self.show_orders_page)
+
+        new_order_btn = QPushButton("הזמנה חדשה")
+        new_order_btn.setObjectName("primaryBtn")
+        new_order_btn.clicked.connect(self.show_suppliers_page)
+
+        nav_layout.addWidget(orders_btn)
+        nav_layout.addWidget(new_order_btn)
+
+        # Menu button - ימין ביותר
         menu_btn = QPushButton("☰")
         menu_btn.setObjectName("menuBtn")
         menu_btn.setFixedSize(40, 40)
         menu_btn.clicked.connect(self.toggle_side_menu)
 
-        # סידור כללי בלייאוט הראשי - מימין לשמאל
-        layout.addWidget(menu_btn)         # ימין
+        # סידור כללי בלייאוט הראשי
+        layout.addWidget(logout_btn)       # שמאל
         layout.addWidget(title, 1)         # מרכז עם stretch
-        layout.addLayout(actions_layout)   # שמאל
-        
+        layout.addLayout(nav_layout)       # ימין
+        layout.addWidget(menu_btn)         # ימין ביותר
+
         return topbar
 
     def setup_styles(self):
@@ -153,12 +154,13 @@ class StoreOwnerHome(QWidget):
                 border-radius:10px; padding:8px 12px; font-weight:500; min-width:120px;
             }
             QPushButton#secondaryBtn:hover { background:#f9fafb; border-color:#3b82f6; color:#3b82f6; }
-            QPushButton#ghostBtn {
-                background:#fff; color:#111827; border:1px solid #e5e7eb;
-                border-radius:10px; padding:8px 12px; font-weight:500;
-            }
-            QPushButton#ghostBtn:hover { background:#f6f7f9; border-color:#d1d5db; }
-        """)
+          QPushButton#ghostBtn {
+    background:#fff; color:#111827; border:1px solid #dc2626;
+    border-radius:10px; padding:8px 12px; font-weight:500;
+}
+QPushButton#ghostBtn:hover { 
+    background:#fef2f2; border-color:#b91c1c; color:#dc2626; 
+}""")
 
     # ===== ניווט לבצוע הזמנת ספק (inline) =====
     def open_order_inline(self, supplier_id: int):
@@ -228,7 +230,8 @@ class StoreOwnerHome(QWidget):
     def show_side_menu(self):
         menu_height = min(400, self.height() - 60)
         self.side_menu.resize(280, menu_height)
-        self.side_menu.move(0, 60)
+        menu_x = self.width() - 280  # רוחב החלון פחות רוחב התפריט
+        self.side_menu.move(menu_x, 60)
         self.side_menu.show()
         self.side_menu.raise_()
 

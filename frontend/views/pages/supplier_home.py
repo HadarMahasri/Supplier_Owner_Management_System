@@ -293,32 +293,31 @@ class SupplierHome(QWidget):
         title.setObjectName("title")
         title.setAlignment(Qt.AlignCenter)   # מרכז את הטקסט
         
-        # Actions - הכפתורים בצד שמאל
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(8)
-        
-        logout_btn = QPushButton("התנתק")
-        logout_btn.setObjectName("ghostBtn")
-        logout_btn.clicked.connect(self.logout_requested.emit)
-        
+        # כפתורי ניווט בצד ימין
+        nav_layout = QHBoxLayout()
+        nav_layout.setSpacing(8)
+
         orders_btn = QPushButton("רשימת הזמנות")
         orders_btn.setObjectName("secondaryBtn")
         orders_btn.clicked.connect(self.show_orders_page)
-        
+
         products_btn = QPushButton("ניהול מוצרים")
         products_btn.setObjectName("primaryBtn")
         products_btn.clicked.connect(self.show_products_page)
-        
-        # סדר חדש: התנתק הכי שמאלי
-        actions_layout.addWidget(logout_btn)
-        actions_layout.addWidget(orders_btn)
-        actions_layout.addWidget(products_btn)
-        
+
+        nav_layout.addWidget(orders_btn)
+        nav_layout.addWidget(products_btn)
+
+        # כפתור התנתקות בצד שמאל
+        logout_btn = QPushButton("התנתק")
+        logout_btn.setObjectName("ghostBtn")
+        logout_btn.clicked.connect(self.logout_requested.emit)
+
         # סידור כללי בלייאאוט הראשי
-        layout.addLayout(actions_layout)   # שמאל
+        layout.addWidget(logout_btn)       # שמאל
         layout.addWidget(title, 1)         # מרכז עם stretch
-        layout.addWidget(menu_btn)         # ימין
-        
+        layout.addLayout(nav_layout)       # ימין (לפני הmenu button)
+        layout.addWidget(menu_btn)         # ימין ביותר
         return topbar
 
     
@@ -346,7 +345,7 @@ class SupplierHome(QWidget):
             }
             QPushButton#menuBtn:hover {
                 background: #f9fafb;
-                border-color: #10b981;
+                border-color: #228B22;
             }
             QPushButton#menuBtn:pressed {
                 background: #f3f4f6;
@@ -359,7 +358,7 @@ class SupplierHome(QWidget):
             }
             
             QPushButton#primaryBtn {
-                background: #10b981;
+                background: #008000;
                 color: #ffffff;
                 border: 1px solid #059669;
                 border-radius: 10px;
@@ -387,22 +386,23 @@ class SupplierHome(QWidget):
             }
             QPushButton#secondaryBtn:hover {
                 background: #f9fafb;
-                border-color: #10b981;
-                color: #10b981;
+                border-color: #008000;
+                color: #228B22;
             }
             
             QPushButton#ghostBtn {
-                background: #ffffff;
-                color: #111827;
-                border: 1px solid #e5e7eb;
-                border-radius: 10px;
-                padding: 8px 12px;
-                font-weight: 500;
-            }
-            QPushButton#ghostBtn:hover {
-                background: #f6f7f9;
-                border-color: #d1d5db;
-            }
+    background: #ffffff;
+    color: #111827;
+    border: 1px solid #dc2626;
+    border-radius: 10px;
+    padding: 8px 12px;
+    font-weight: 500;
+}
+QPushButton#ghostBtn:hover {
+    background: #fef2f2;
+    border-color: #b91c1c;
+    color: #dc2626;
+}
         """)
     
     # Navigation methods
@@ -469,23 +469,22 @@ class SupplierHome(QWidget):
             self.show_side_menu()
     
     def show_side_menu(self):
-        """הצגת התפריט הצידי - בצד שמאל מתחת לטופבר"""
-        # מיקום התפריט בצד שמאל מתחת לטופבר
+        """הצגת התפריט הצידי - בצד ימין מתחת לטופבר"""
+        # מיקום התפריט בצד ימין מתחת לטופבר
         menu_height = min(400, self.height() - 60)
         self.side_menu.resize(280, menu_height)
         
         # מיקום ביחס לחלון הראשי
-        menu_x = 0  # בצד שמאל
+        menu_x = self.width() - 280  # בצד ימין
         menu_y = 60  # מתחת לטופבר
         
         self.side_menu.move(menu_x, menu_y)
         self.side_menu.show()
         self.side_menu.raise_()
-    
-    def hide_side_menu(self):
-        """הסתרת התפריט הצידי"""
-        self.side_menu.hide()
-    
+        def hide_side_menu(self):
+            """הסתרת התפריט הצידי"""
+            self.side_menu.hide()
+        
     # Event handlers המקוריים
     def show_menu(self):
         """הצגת תפריט - עכשיו פותח תפריט צידי"""

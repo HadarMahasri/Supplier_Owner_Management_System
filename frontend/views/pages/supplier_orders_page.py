@@ -441,11 +441,11 @@ class SupplierOrdersPage(QWidget):
         }
         QPushButton#clearFilterBtn:hover {
             background: #f3f4f6;
-            border-color: #10b981;
+            border-color: #008000;
         }
         
         QPushButton#exportBtn {
-            background: #10b981;
+            background: #008000;
             color: white;
             border: none;
             border-radius: 10px;
@@ -454,11 +454,11 @@ class SupplierOrdersPage(QWidget):
             font-size: 14px;
         }
         QPushButton#exportBtn:hover {
-            background: #059669;
+            background: #228B22;
         }
         
         QPushButton#historyBtn {
-            background: #6366f1;
+            background: #0a6b82;
             color: white;
             border: none;
             border-radius: 10px;
@@ -467,7 +467,7 @@ class SupplierOrdersPage(QWidget):
             font-size: 14px;
         }
         QPushButton#historyBtn:hover {
-            background: #4f46e5;
+            background: #0891b2;
         }
         
         /* כותרות הטבלה */
@@ -505,7 +505,7 @@ class SupplierOrdersPage(QWidget):
         
         /* כפתורי סטטוס */
         QPushButton#statusBtnPending {
-            background: #f59e0b;
+            background: #008000;
             color: white;
             border: none;
             border-radius: 20px;
@@ -514,7 +514,7 @@ class SupplierOrdersPage(QWidget):
             font-size: 12px;
         }
         QPushButton#statusBtnPending:hover {
-            background: #d97706;
+            background: #228B22;
         }
         
         QPushButton#statusBtnActive {
