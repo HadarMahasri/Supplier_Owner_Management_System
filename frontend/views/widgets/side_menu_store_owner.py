@@ -37,7 +37,7 @@ class SideMenu(QFrame):
             ("suppliers", "רשימת ספקים"),
             ("reports", "דוחות הזמנות"),
             ("settings", "הגדרות חנות"),
-            ("help", "עזרה ותמיכה"),
+            ("ai_chat", "שיחה עם נציג AI"),
         ]
 
         menu_container = QWidget()
@@ -54,11 +54,11 @@ class SideMenu(QFrame):
         layout.addWidget(menu_container)
 
     def on_menu_click(self, action: str):
-        if action in ["orders", "new_order", "suppliers"]:
-            self.page_requested.emit(action)
-            self.hide()
+        if action in ["orders", "new_order", "suppliers", "ai_chat"]:
+             self.page_requested.emit(action)
+             self.hide()
         else:
-            QMessageBox.information(self, "בקרוב", f"תכונה '{action}' תהיה זמינה בקרוב")
+             QMessageBox.information(self, "בקרוב", f"תכונה '{action}' תהיה זמינה בקרוב")
 
     def setup_styles(self):
         self.setStyleSheet("""

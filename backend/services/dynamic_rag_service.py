@@ -1,4 +1,3 @@
-# backend/services/dynamic_rag_service.py
 import logging
 from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
@@ -13,202 +12,221 @@ logger = logging.getLogger(__name__)
 
 class DynamicRAGService:
     """
-    שירות RAG דינמי שמוסיף נתוני משתמש אישיים למאגר הוקטורים
-    רק כשנדרש ועם מנגנון cache חכם
+    שירות RAG דינמי מואץ:
+    - מטמון אגרסיבי יותר
+    - שאילתות DB מובטלות
+    - עיבוד מהיר יותר של נתוני משתמש
+    - דחיסה של context
     """
     
     def __init__(self):
         self.ollama_service = OllamaService()
         self.qdrant_service = QdrantService()
         
-        # מטמון למניעת חישובים מיותרים
+        # מטמון מושרש יותר
         self.user_data_cache = {}
-        self.cache_duration = 300  # 5 דקות
+        self.context_cache = {}
+        self.vector_cache = {}
+        
+        self.cache_duration = 600  # 10 דקות במקום 5
+        self.max_cache_size = 100
         
         # Collection נפרדת לנתונים דינמיים
         self.dynamic_collection = "user_dynamic_data"
         
+        logger.info("DynamicRAGService initialized with speed optimizations")
+        
     def initialize_user_context(self, user_id: int, db: Session) -> bool:
         """
-        אתחול הקשר משתמש - רק אם נדרש
-        מחזיר True אם נוצר הקשר חדש, False אם כבר קיים
+        אתחול מהיר של הקשר משתמש עם מטמון אגרסיבי
         """
         try:
-            cache_key = f"user_{user_id}"
+            cache_key = f"user_init_{user_id}"
             current_time = time.time()
             
-            # בדיקת מטמון
+            # בדיקת מטמון מתקדמת
             if cache_key in self.user_data_cache:
                 cached_data = self.user_data_cache[cache_key]
                 if current_time - cached_data["timestamp"] < self.cache_duration:
-                    logger.info(f"Using cached data for user {user_id}")
-                    return False
+                    logger.debug(f"Using cached init data for user {user_id}")
+                    return cached_data.get("initialized", False)
             
-            # יצירת נתוני הקשר אישי
-            user_context = self._generate_user_context(user_id, db)
+            # יצירת נתוני הקשר מהיר
+            user_context = self._generate_user_context_fast(user_id, db)
             
             if not user_context:
+                # שמירת תוצאה שלילית במטמון
+                self.user_data_cache[cache_key] = {
+                    "timestamp": current_time,
+                    "initialized": False
+                }
                 return False
             
-            # יצירת embedding והוספה לאוסף דינמי
-            self._add_user_context_to_vectors(user_id, user_context)
+            # הוספה למאגר וקטורים (אם נדרש)
+            if len(user_context) > 50:  # רק אם יש מספיק תוכן
+                self._add_user_context_to_vectors_fast(user_id, user_context)
             
             # עדכון מטמון
             self.user_data_cache[cache_key] = {
                 "timestamp": current_time,
-                "context": user_context
+                "context": user_context,
+                "initialized": True
             }
             
-            logger.info(f"Generated dynamic context for user {user_id}")
+            # ניקוי מטמון
+            self._cleanup_cache()
+            
+            logger.debug(f"Generated dynamic context for user {user_id}")
             return True
             
         except Exception as e:
             logger.error(f"Error initializing user context for {user_id}: {e}")
             return False
     
-    def _generate_user_context(self, user_id: int, db: Session) -> str:
-        """יצירת טקסט הקשר מותאם אישית למשתמש"""
+    def _generate_user_context_fast(self, user_id: int, db: Session) -> str:
+        """יצירת טקסט הקשר מותאם במהירות מקסימלית"""
         try:
             context_parts = []
             
-            # פרטי משתמש בסיסיים
-            user_info = db.execute(text("""
-                SELECT userType, company_name, contact_name, phone,
-                       city_id, street, house_number, opening_time, closing_time
-                FROM users WHERE id = :user_id
+            # שאילתה מהירה יחידה לכל הנתונים החיוניים
+            user_data = db.execute(text("""
+                SELECT 
+                    u.userType, u.company_name, u.contact_name,
+                    COALESCE(stats.products_count, 0) as products_count,
+                    COALESCE(stats.active_orders, 0) as active_orders,
+                    COALESCE(stats.total_orders, 0) as total_orders
+                FROM users u
+                LEFT JOIN (
+                    SELECT 
+                        u.id,
+                        COUNT(DISTINCT p.id) as products_count,
+                        COUNT(DISTINCT CASE WHEN o.status = N'בתהליך' THEN o.id END) as active_orders,
+                        COUNT(DISTINCT o.id) as total_orders
+                    FROM users u
+                    LEFT JOIN products p ON (u.userType = 'Supplier' AND p.supplier_id = u.id AND p.is_active = 1)
+                    LEFT JOIN orders o ON (
+                        (u.userType = 'StoreOwner' AND o.owner_id = u.id) OR
+                        (u.userType = 'Supplier' AND o.supplier_id = u.id)
+                    )
+                    WHERE u.id = :user_id
+                    GROUP BY u.id
+                ) stats ON u.id = stats.id
+                WHERE u.id = :user_id
             """), {"user_id": user_id}).fetchone()
             
-            if not user_info:
+            if not user_data:
                 return ""
             
-            user_type = user_info.userType
-            context_parts.append(f"=== פרופיל משתמש {user_id} ===")
-            context_parts.append(f"סוג משתמש: {user_type}")
-            context_parts.append(f"שם איש קשר: {user_info.contact_name or 'לא צוין'}")
+            user_type = user_data.userType
+            context_parts.append(f"משתמש: {user_type}")
             
-            if user_info.company_name:
-                context_parts.append(f"שם החברה: {user_info.company_name}")
+            if user_data.contact_name:
+                context_parts.append(f"שם: {user_data.contact_name}")
             
-            # נתונים ספציפיים לספק
+            # נתונים מהירים לפי סוג משתמש
             if user_type == "Supplier":
-                supplier_data = db.execute(text("""
-                    SELECT 
-                        COUNT(p.id) as total_products,
-                        COUNT(CASE WHEN p.stock = 0 THEN 1 END) as out_of_stock,
-                        AVG(CAST(p.unit_price as FLOAT)) as avg_price,
-                        COUNT(CASE WHEN o.status = N'בתהליך' THEN 1 END) as pending_orders
-                    FROM products p
-                    LEFT JOIN order_items oi ON p.id = oi.product_id
-                    LEFT JOIN orders o ON oi.order_id = o.id
-                    WHERE p.supplier_id = :user_id AND p.is_active = 1
-                """), {"user_id": user_id}).fetchone()
+                context_parts.append(f"מוצרים: {user_data.products_count}")
+                context_parts.append(f"הזמנות פעילות: {user_data.active_orders}")
                 
-                if supplier_data:
-                    context_parts.append(f"מספר מוצרים פעילים: {supplier_data.total_products or 0}")
-                    context_parts.append(f"מוצרים שאזלו מהמלאי: {supplier_data.out_of_stock or 0}")
-                    context_parts.append(f"מחיר ממוצע של מוצרים: {supplier_data.avg_price or 0:.2f} שקלים")
-                    context_parts.append(f"הזמנות ממתינות: {supplier_data.pending_orders or 0}")
-                
-                # המוצרים הפופולריים של הספק
-                popular_products = db.execute(text("""
-                    SELECT TOP 5 p.product_name, COUNT(oi.id) as order_count, p.unit_price
-                    FROM products p
-                    LEFT JOIN order_items oi ON p.id = oi.product_id
-                    WHERE p.supplier_id = :user_id AND p.is_active = 1
-                    GROUP BY p.id, p.product_name, p.unit_price
-                    ORDER BY order_count DESC
-                """), {"user_id": user_id}).fetchall()
-                
-                if popular_products:
-                    context_parts.append("המוצרים הפופולריים ביותר של הספק:")
-                    for product in popular_products:
-                        context_parts.append(f"- {product.product_name}: {product.order_count or 0} הזמנות, מחיר {product.unit_price} שקלים")
+                # רק אם יש מוצרים, קבל דוגמאות מהירות
+                if user_data.products_count > 0:
+                    popular = db.execute(text("""
+                        SELECT TOP 2 p.product_name, p.unit_price
+                        FROM products p
+                        WHERE p.supplier_id = :user_id AND p.is_active = 1
+                        ORDER BY p.id DESC
+                    """), {"user_id": user_id}).fetchall()
+                    
+                    if popular:
+                        context_parts.append("מוצרים עיקריים:")
+                        for product in popular:
+                            context_parts.append(f"- {product.product_name} ({product.unit_price} ש\"ח)")
             
-            # נתונים ספציפיים לבעל חנות
             elif user_type == "StoreOwner":
-                owner_data = db.execute(text("""
-                    SELECT 
-                        COUNT(o.id) as total_orders,
-                        COUNT(CASE WHEN o.status = N'בתהליך' THEN 1 END) as pending_orders,
-                        COUNT(CASE WHEN o.status = N'הושלמה' THEN 1 END) as completed_orders,
-                        COUNT(DISTINCT osl.supplier_id) as connected_suppliers
-                    FROM orders o
-                    LEFT JOIN owner_supplier_links osl ON o.owner_id = osl.owner_id AND osl.status = 'APPROVED'
-                    WHERE o.owner_id = :user_id
-                """), {"user_id": user_id}).fetchone()
+                context_parts.append(f"סך הזמנות: {user_data.total_orders}")
+                context_parts.append(f"הזמנות פעילות: {user_data.active_orders}")
                 
-                if owner_data:
-                    context_parts.append(f"סך הכל הזמנות: {owner_data.total_orders or 0}")
-                    context_parts.append(f"הזמנות בתהליך: {owner_data.pending_orders or 0}")
-                    context_parts.append(f"הזמנות שהושלמו: {owner_data.completed_orders or 0}")
-                    context_parts.append(f"ספקים מחוברים: {owner_data.connected_suppliers or 0}")
-                
-                # פרטי החנות
-                if user_info.street and user_info.house_number:
-                    context_parts.append(f"כתובת החנות: {user_info.street} {user_info.house_number}")
-                
-                if user_info.opening_time and user_info.closing_time:
-                    context_parts.append(f"שעות פעילות: {user_info.opening_time} - {user_info.closing_time}")
-                
-                # ההזמנות האחרונות
-                recent_orders = db.execute(text("""
-                    SELECT TOP 3 o.id, o.status, u.company_name as supplier_name, o.created_date
-                    FROM orders o
-                    JOIN users u ON o.supplier_id = u.id
-                    WHERE o.owner_id = :user_id
-                    ORDER BY o.created_date DESC
-                """), {"user_id": user_id}).fetchall()
-                
-                if recent_orders:
-                    context_parts.append("ההזמנות האחרונות:")
-                    for order in recent_orders:
-                        supplier = order.supplier_name or "ספק לא ידוע"
-                        context_parts.append(f"- הזמנה #{order.id} מ{supplier}: {order.status}")
+                # רק אם יש הזמנות, קבל דוגמאות מהירות
+                if user_data.total_orders > 0:
+                    recent = db.execute(text("""
+                        SELECT TOP 2 o.id, u.company_name, o.status
+                        FROM orders o
+                        JOIN users u ON o.supplier_id = u.id
+                        WHERE o.owner_id = :user_id
+                        ORDER BY o.created_date DESC
+                    """), {"user_id": user_id}).fetchall()
+                    
+                    if recent:
+                        context_parts.append("הזמנות אחרונות:")
+                        for order in recent:
+                            supplier = order.company_name or "ספק"
+                            context_parts.append(f"- הזמנה #{order.id} מ{supplier}: {order.status}")
             
-            return "\n".join(context_parts)
+            # חזרת context מתומצת
+            context = "\n".join(context_parts)
+            return context if len(context) < 1000 else context[:1000]
             
         except Exception as e:
-            logger.error(f"Error generating user context: {e}")
+            logger.error(f"Error generating fast user context: {e}")
             return ""
     
-    def _add_user_context_to_vectors(self, user_id: int, context: str):
-        """הוספת הקשר המשתמש למאגר וקטורים זמני"""
+    def _add_user_context_to_vectors_fast(self, user_id: int, context: str):
+        """הוספת הקשר למאגר וקטורים - גרסה מהירה"""
         try:
-            # יצירת embedding
+            # יצירת embedding רק אם הטקסט מספיק ארוך
+            if len(context) < 50:
+                return
+                
             embedding = self.ollama_service.get_embedding(context)
             if not embedding:
                 logger.warning(f"Failed to generate embedding for user {user_id}")
                 return
             
-            # יצירת ID ייחודי
-            context_id = hashlib.md5(f"user_{user_id}_{int(time.time())}".encode()).hexdigest()
+            # שמירה במטמון זיכרון במקום Qdrant למהירות
+            cache_key = f"vector_user_{user_id}"
+            self.vector_cache[cache_key] = {
+                "embedding": embedding,
+                "text": context,
+                "timestamp": time.time()
+            }
             
-            # הוספה לאוסף זמני (בזיכרון או במאגר נפרד)
-            # כאן אפשר להוסיף לQdrant או לשמור במטמון זיכרון
-            self._store_dynamic_vector(context_id, embedding, context, user_id)
-            
+            # ניקוי מטמון וקטורים
+            if len(self.vector_cache) > 50:
+                oldest = min(self.vector_cache.keys(), 
+                           key=lambda k: self.vector_cache[k]["timestamp"])
+                del self.vector_cache[oldest]
+                
         except Exception as e:
             logger.error(f"Error adding user context to vectors: {e}")
     
-    def _store_dynamic_vector(self, context_id: str, embedding: List[float], text: str, user_id: int):
-        """שמירת וקטור דינמי - יכול להיות בזיכרון או במאגר נפרד"""
-        # לעת עתה נשמור במטמון זיכרון
-        # בגרסה מתקדמת אפשר להוסיף לQdrant collection נפרד
-        cache_key = f"vector_user_{user_id}"
-        self.user_data_cache[cache_key] = {
-            "embedding": embedding,
-            "text": text,
-            "timestamp": time.time()
-        }
+    def get_user_context_text(self, user_id: int) -> str:
+        """קבלת טקסט הקשר משתמש מהמטמון"""
+        try:
+            cache_key = f"user_init_{user_id}"
+            if cache_key in self.user_data_cache:
+                cached = self.user_data_cache[cache_key]
+                if time.time() - cached["timestamp"] < self.cache_duration:
+                    return cached.get("context", "")
+            return ""
+        except Exception as e:
+            logger.error(f"Error getting user context text: {e}")
+            return ""
     
     def get_enhanced_context(self, user_id: int, query_embedding: List[float], base_context: str) -> str:
-        """קבלת הקשר משופר עם נתוני המשתמש"""
+        """קבלת הקשר משופר - גרסה מהירה"""
         try:
-            # חיפוש בנתונים האישיים
-            user_context = self._search_user_context(user_id, query_embedding)
+            # חיפוש מהיר בנתונים האישיים
+            user_context = self._search_user_context_fast(user_id, query_embedding)
             
             if user_context:
-                return f"{base_context}\n\n=== מידע אישי רלוונטי ===\n{user_context}"
+                # חיבור מהיר של contexts
+                enhanced = f"{base_context}\n\nמידע אישי: {user_context}"
+                
+                # הגבלת אורך למהירות
+                if len(enhanced) > 2000:
+                    enhanced = enhanced[:2000] + "..."
+                    
+                return enhanced
             
             return base_context
             
@@ -216,20 +234,27 @@ class DynamicRAGService:
             logger.error(f"Error enhancing context: {e}")
             return base_context
     
-    def _search_user_context(self, user_id: int, query_embedding: List[float]) -> str:
-        """חיפוש בהקשר האישי של המשתמש"""
+    def _search_user_context_fast(self, user_id: int, query_embedding: List[float]) -> str:
+        """חיפוש מהיר בהקשר האישי"""
         try:
             cache_key = f"vector_user_{user_id}"
-            if cache_key in self.user_data_cache:
-                cached_vector = self.user_data_cache[cache_key]
+            if cache_key not in self.vector_cache:
+                return ""
                 
-                # חישוב דמיון (פשוט - אפשר לשפר)
-                user_embedding = cached_vector["embedding"]
-                similarity = self._cosine_similarity(query_embedding, user_embedding)
-                
-                # אם יש דמיון מספיק, החזר את הטקסט
-                if similarity > 0.3:  # threshold לדמיון
-                    return cached_vector["text"]
+            cached_vector = self.vector_cache[cache_key]
+            
+            # בדיקת תקינות זמן
+            if time.time() - cached_vector["timestamp"] > self.cache_duration:
+                del self.vector_cache[cache_key]
+                return ""
+            
+            # חישוב דמיון מהיר
+            user_embedding = cached_vector["embedding"]
+            similarity = self._cosine_similarity_fast(query_embedding, user_embedding)
+            
+            # threshold נמוך יותר למהירות
+            if similarity > 0.2:
+                return cached_vector["text"]
             
             return ""
             
@@ -237,34 +262,87 @@ class DynamicRAGService:
             logger.error(f"Error searching user context: {e}")
             return ""
     
-    def _cosine_similarity(self, vec1: List[float], vec2: List[float]) -> float:
-        """חישוב דמיון קוסינוס פשוט"""
+    def _cosine_similarity_fast(self, vec1: List[float], vec2: List[float]) -> float:
+        """חישוב דמיון קוסינוס מהיר יותר"""
         try:
-            import math
+            # חישוב על חלק מהוקטור בלבד למהירות
+            sample_size = min(100, len(vec1), len(vec2))
             
-            dot_product = sum(a * b for a, b in zip(vec1, vec2))
-            magnitude_a = math.sqrt(sum(a * a for a in vec1))
-            magnitude_b = math.sqrt(sum(b * b for b in vec2))
+            dot_product = sum(a * b for a, b in zip(vec1[:sample_size], vec2[:sample_size]))
             
-            if magnitude_a == 0 or magnitude_b == 0:
+            # חישוב magnitude מהיר יותר
+            mag1 = sum(a * a for a in vec1[:sample_size]) ** 0.5
+            mag2 = sum(b * b for b in vec2[:sample_size]) ** 0.5
+            
+            if mag1 == 0 or mag2 == 0:
                 return 0
             
-            return dot_product / (magnitude_a * magnitude_b)
+            return dot_product / (mag1 * mag2)
             
         except Exception as e:
-            logger.error(f"Error calculating cosine similarity: {e}")
+            logger.error(f"Error calculating fast cosine similarity: {e}")
             return 0
     
-    def cleanup_user_cache(self, user_id: int):
-        """ניקוי מטמון משתמש"""
+    def _cleanup_cache(self):
+        """ניקוי מטמון אוטומטי"""
         try:
-            keys_to_remove = [key for key in self.user_data_cache.keys() 
-                            if key.startswith(f"user_{user_id}") or key.startswith(f"vector_user_{user_id}")]
+            current_time = time.time()
+            
+            # ניקוי מטמון נתוני משתמש
+            expired_keys = [
+                key for key, data in self.user_data_cache.items()
+                if current_time - data["timestamp"] > self.cache_duration
+            ]
+            for key in expired_keys:
+                del self.user_data_cache[key]
+            
+            # ניקוי מטמון וקטורים
+            expired_vector_keys = [
+                key for key, data in self.vector_cache.items()
+                if current_time - data["timestamp"] > self.cache_duration
+            ]
+            for key in expired_vector_keys:
+                del self.vector_cache[key]
+                
+            # הגבלת גודל מטמון
+            if len(self.user_data_cache) > self.max_cache_size:
+                oldest_keys = sorted(
+                    self.user_data_cache.keys(),
+                    key=lambda k: self.user_data_cache[k]["timestamp"]
+                )[:10]  # מחק 10 הישנים ביותר
+                for key in oldest_keys:
+                    del self.user_data_cache[key]
+                    
+        except Exception as e:
+            logger.error(f"Error cleaning cache: {e}")
+    
+    def cleanup_user_cache(self, user_id: int):
+        """ניקוי מטמון משתמש ספציפי"""
+        try:
+            keys_to_remove = [
+                key for key in self.user_data_cache.keys() 
+                if f"user_{user_id}" in key
+            ]
             
             for key in keys_to_remove:
                 del self.user_data_cache[key]
                 
-            logger.info(f"Cleaned cache for user {user_id}")
+            # ניקוי מטמון וקטורים
+            vector_key = f"vector_user_{user_id}"
+            if vector_key in self.vector_cache:
+                del self.vector_cache[vector_key]
+                
+            logger.debug(f"Cleaned cache for user {user_id}")
             
         except Exception as e:
-            logger.error(f"Error cleaning cache: {e}")
+            logger.error(f"Error cleaning cache for user {user_id}: {e}")
+
+    def get_cache_stats(self) -> Dict:
+        """סטטיסטיקות מטמון למעקב ביצועים"""
+        return {
+            "user_data_cache_size": len(self.user_data_cache),
+            "vector_cache_size": len(self.vector_cache),
+            "context_cache_size": len(self.context_cache),
+            "cache_duration": self.cache_duration,
+            "max_cache_size": self.max_cache_size
+        }
