@@ -598,11 +598,12 @@ class SupplierProductsPage(QWidget):
 
         # חיפוש
         search_row = QHBoxLayout()
-        search_row.setAlignment(Qt.AlignRight)
+        search_row.setAlignment(Qt.AlignCenter)
         self.search = QLineEdit()
+        self.search.setObjectName("SearchBox")
         self.search.setPlaceholderText("חיפוש מוצר…")
         self.search.textChanged.connect(self._apply_filter)
-        search_row.addWidget(self.search, 1, Qt.AlignRight)
+        search_row.addWidget(self.search, 0, Qt.AlignCenter)
         layout.addLayout(search_row)
 
         # כותרת "מוצרים שקיימים במערכת"
@@ -881,36 +882,83 @@ class SupplierProductsPage(QWidget):
     # ---- Styles ----
     def _stylesheet(self) -> str:
         return """
-        QWidget { font-family: "Rubik", "Segoe UI", Arial; font-size: 14px; }
-        QLabel#H1 { font-size: 22px; font-weight: 700; padding: 4px 0; }
-        QLabel#H2 { font-size: 16px; font-weight: 600; padding: 8px 0 0; color: #333; }
+    QWidget { font-family: "Rubik", "Segoe UI", Arial; font-size: 14px; }
+    QLabel#H1 { font-size: 22px; font-weight: 700; padding: 4px 0; }
+    QLabel#H2 { font-size: 16px; font-weight: 600; padding: 8px 0 0; color: #333; }
 
-        QFrame#ProductCard {
-            background: #fff; border: 1px solid #e8e8e8; border-radius: 14px;
-        }
-        QFrame#ProductCard:hover { border-color: #cfcfcf; }
-        QLabel#ProductTitle { font-weight: 700; margin-top: 2px; font-size: 14px; }
+    QLineEdit#SearchBox {
+        padding: 12px 16px;
+        border: 2px solid #e5e7eb;
+        border-radius: 25px;
+        font-size: 16px;
+        background: #ffffff;
+        color: #111827;
+        max-width: 400px;
+        min-width: 300px;
+    }
+    QLineEdit#SearchBox:focus {
+        border-color: #008000;
+        outline: none;
+    }
 
-        /* כפתורים רגילים */
-        QPushButton { padding: 8px 12px; border-radius: 10px; border: 1px solid #e5e7eb; font-size: 16px; }
-        QPushButton#Primary { background: #2563eb; color: #fff; border: none; }
-        QPushButton#Primary:hover { background: #1d4ed8; }
-        QPushButton#Danger { background: #22c55e; color: #fff; border: none; }
-        QPushButton#Danger:hover { background: #16a34a; }
-        QPushButton#Light { background: #f3f4f6; }
-        QPushButton#Light:hover { background: #e5e7eb; }
-        
-        /* כפתור עדכון מלאי קטן */
-        QPushButton#SmallLight { 
-            background: #4ade80; 
-            color: #fff;
-            padding: 4px 8px; 
-            font-size: 11px; 
-            border-radius: 6px;
-            border: none;
-            min-width: 60px;
-        }
-        QPushButton#SmallLight:hover { background: #22c55e; }
+    QFrame#ProductCard {
+        background: #fff; 
+        border: 1px solid #e8e8e8; 
+        border-radius: 14px;
+        padding: 8px;
+    }
+    QFrame#ProductCard:hover { 
+        border-color: #008000;
+        background: #f8fff8;
+    }
+    QLabel#ProductTitle { font-weight: 700; margin-top: 2px; font-size: 14px; }
 
-        QLabel#ProductImage { background: #f8fafc; border-radius: 10px; }
-        """
+    /* כפתורים רגילים */
+    QPushButton { padding: 8px 12px; border-radius: 10px; border: 1px solid #A6A8AB; font-size: 16px; }
+    QPushButton#Primary { 
+    background: #008000; 
+    color: #fff; 
+    border: none;
+    padding: 6px 12px;
+    font-size: 13px;
+    min-width: 80px;
+    max-width: 100px;
+}
+QPushButton#Primary:hover { background: #00BF00; }
+    QPushButton#Danger { 
+    background: #ffffff; 
+    color: #dc2626; 
+    border: 2px solid #dc2626;
+    padding: 6px 12px;
+    font-size: 12px;
+    min-width: 80px;
+    max-width: 85px;
+}
+QPushButton#Danger:hover { 
+    background: #fef2f2; 
+    border-color: #b91c1c;
+    color: #b91c1c;
+}
+   QPushButton#Light { 
+    background: #f3f4f6; 
+    color: #000000; 
+}
+QPushButton#Light:hover { 
+    background: #e5e7eb; 
+    color: #000000; 
+}
+    
+    /* כפתור עדכון מלאי קטן */
+    QPushButton#SmallLight { 
+        background: #7B7C7D; 
+        color: #fff;
+        padding: 4px 8px; 
+        font-size: 11px; 
+        border-radius: 6px;
+        border: none;
+        min-width: 60px;
+    }
+    QPushButton#SmallLight:hover { background: #e5e7eb; }
+
+    QLabel#ProductImage { background: #f8fafc; border-radius: 10px; }
+    """
