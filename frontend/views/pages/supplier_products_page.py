@@ -475,9 +475,9 @@ class ProductCard(QFrame):
         info.addLayout(stock_row)
         root.addLayout(info)
 
-        # כפתורים אחרי
+        # כפתורים אחרים - תיקון הרווח
         actions = QHBoxLayout()
-        actions.setSpacing(6)
+        actions.setSpacing(15)  # רווח קטן בין הכפתורים
         self.btn_delete = QPushButton("מחק מוצר")
         self.btn_edit   = QPushButton("ערוך מוצר")
         self.btn_delete.setObjectName("Danger")
@@ -559,8 +559,13 @@ class SupplierProductsPage(QWidget):
                 self.setAutoFillBackground(True)
 
         root = QVBoxLayout(self)
-        root.setContentsMargins(24, 24, 24, 24)
-        root.setSpacing(10)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(16)
+
+        # כותרת מודרנית כמו בדפים אחרים
+        title = QLabel("ניהול מוצרים עבור הספק שלי")
+        title.setObjectName("productsTitle")
+        root.addWidget(title)
 
         # עכשיו הכל embedded במקום dialogs
         self.content_stack = QStackedWidget()
@@ -569,7 +574,7 @@ class SupplierProductsPage(QWidget):
         self.products_page = self._create_products_list_page()
         self.content_stack.addWidget(self.products_page)
         
-        root.addWidget(self.content_stack)
+        root.addWidget(self.content_stack, 1)
         
         self.setStyleSheet(self._stylesheet())
         self.reload_from_server()
@@ -578,21 +583,18 @@ class SupplierProductsPage(QWidget):
         """יצירת העמוד עם רשימת המוצרים"""
         page = QWidget()
         layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        layout.setContentsMargins(24, 0, 24, 24)
+        layout.setSpacing(16)
 
         # כותרת + הוספה
         header = QHBoxLayout()
         header.setAlignment(Qt.AlignRight)
-        title = QLabel("ניהול מוצרים עבור הספק שלי")
-        title.setObjectName("H1")
 
         self.btn_add = QPushButton("הוסף מוצר חדש")
         self.btn_add.setObjectName("Primary")
         self.btn_add.clicked.connect(self._show_add_form)
 
         header.addWidget(self.btn_add, 0, Qt.AlignRight)
-        header.addWidget(title, 0, Qt.AlignRight)
         header.addStretch(1)
         layout.addLayout(header)
 
@@ -606,13 +608,10 @@ class SupplierProductsPage(QWidget):
         search_row.addWidget(self.search, 0, Qt.AlignCenter)
         layout.addLayout(search_row)
 
-        # כותרת "מוצרים שקיימים במערכת"
-        sub_row = QHBoxLayout()
-        sub = QLabel("מוצרים קיימים במערכת")
-        sub.setObjectName("H2")
-        sub_row.addWidget(sub, 0, Qt.AlignRight)
-        sub_row.addStretch(1)
-        layout.addLayout(sub_row)
+        # כותרת "מוצרים קיימים במערכת" בסגנון אחיד
+        sub_title = QLabel("מוצרים קיימים במערכת")
+        sub_title.setObjectName("subTitle")
+        layout.addWidget(sub_title)
 
         # אזור גלילה + גריד
         scroll = QScrollArea()
@@ -741,7 +740,7 @@ class SupplierProductsPage(QWidget):
 
             image_path = payload.get("image_path")
             
-            # עדכון השדות הבסיסיים תמיד - שימוש ישיר בערכים מהטופס
+            # עדכון השדות הבסיסיים תמיד - שימוש ישירות בערכים מהטופס
             basic_update = {
                 "supplier_id": p.supplier_id,
                 "name": payload["name"],        # ← ישירות מהטופס
@@ -883,12 +882,32 @@ class SupplierProductsPage(QWidget):
     def _stylesheet(self) -> str:
         return """
     QWidget { font-family: "Rubik", "Segoe UI", Arial; font-size: 14px; }
-    QLabel#H1 { font-size: 22px; font-weight: 700; padding: 4px 0; }
-    QLabel#H2 { font-size: 16px; font-weight: 600; padding: 8px 0 0; color: #333; }
+    
+    /* כותרת מודרנית כמו בדפים אחרים */
+    QLabel#productsTitle {
+        font-size: 24px;
+        font-weight: 700;
+        color: #065f46;
+        margin-bottom: 8px;
+        padding: 12px;
+        background: #ecfdf5;
+        border-radius: 8px;
+    }
+    
+    /* כותרת משנה מודרנית */
+    QLabel#subTitle {
+        font-size: 18px;
+        font-weight: 600;
+        color: #065f46;
+        padding: 8px 12px;
+        background: #f0fdf4;
+        border-radius: 8px;
+        border: 1px solid #bbf7d0;
+    }
 
     QLineEdit#SearchBox {
         padding: 12px 16px;
-        border: 2px solid #e5e7eb;
+        border: 2px solid #bbf7d0;
         border-radius: 25px;
         font-size: 16px;
         background: #ffffff;
@@ -897,7 +916,7 @@ class SupplierProductsPage(QWidget):
         min-width: 300px;
     }
     QLineEdit#SearchBox:focus {
-        border-color: #008000;
+        border-color: #10b981;
         outline: none;
     }
 
@@ -908,45 +927,45 @@ class SupplierProductsPage(QWidget):
         padding: 8px;
     }
     QFrame#ProductCard:hover { 
-        border-color: #008000;
-        background: #f8fff8;
+        border-color: #10b981;
+        background: #f0fdf4;
     }
     QLabel#ProductTitle { font-weight: 700; margin-top: 2px; font-size: 14px; }
 
     /* כפתורים רגילים */
     QPushButton { padding: 8px 12px; border-radius: 10px; border: 1px solid #A6A8AB; font-size: 16px; }
     QPushButton#Primary { 
-    background: #008000; 
-    color: #fff; 
-    border: none;
-    padding: 6px 12px;
-    font-size: 13px;
-    min-width: 80px;
-    max-width: 100px;
-}
-QPushButton#Primary:hover { background: #00BF00; }
+        background: #10b981; 
+        color: #fff; 
+        border: none;
+        padding: 6px 12px;
+        font-size: 13px;
+        min-width: 80px;
+        max-width: 100px;
+    }
+    QPushButton#Primary:hover { background: #059669; }
     QPushButton#Danger { 
-    background: #ffffff; 
-    color: #dc2626; 
-    border: 2px solid #dc2626;
-    padding: 6px 12px;
-    font-size: 12px;
-    min-width: 80px;
-    max-width: 85px;
-}
-QPushButton#Danger:hover { 
-    background: #fef2f2; 
-    border-color: #b91c1c;
-    color: #b91c1c;
-}
-   QPushButton#Light { 
-    background: #f3f4f6; 
-    color: #000000; 
-}
-QPushButton#Light:hover { 
-    background: #e5e7eb; 
-    color: #000000; 
-}
+        background: #ffffff; 
+        color: #dc2626; 
+        border: 2px solid #dc2626;
+        padding: 6px 12px;
+        font-size: 12px;
+        min-width: 80px;
+        max-width: 85px;
+    }
+    QPushButton#Danger:hover { 
+        background: #fef2f2; 
+        border-color: #b91c1c;
+        color: #b91c1c;
+    }
+    QPushButton#Light { 
+        background: #f3f4f6; 
+        color: #000000; 
+    }
+    QPushButton#Light:hover { 
+        background: #e5e7eb; 
+        color: #000000; 
+    }
     
     /* כפתור עדכון מלאי קטן */
     QPushButton#SmallLight { 
@@ -958,7 +977,7 @@ QPushButton#Light:hover {
         border: none;
         min-width: 60px;
     }
-    QPushButton#SmallLight:hover { background: #e5e7eb; }
+    QPushButton#SmallLight:hover { background: #6b7280; }
 
     QLabel#ProductImage { background: #f8fafc; border-radius: 10px; }
     """

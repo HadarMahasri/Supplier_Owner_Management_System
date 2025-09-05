@@ -31,7 +31,7 @@ class OwnerLinksPage(QWidget):
         hdr = QHBoxLayout()
         hdr.setContentsMargins(16, 12, 16, 8)
         title = QLabel("החיבורים שלי")
-        title.setStyleSheet("font-size:18px; font-weight:700; color:#111827;")
+        title.setStyleSheet("font-size:20px; font-weight:700; color:#3b82f6;")  # שונה מ־#111827 ל־#3b82f6
         hdr.addWidget(title, 0, Qt.AlignRight)
         hdr.addStretch(1)
         root.addLayout(hdr)
@@ -92,30 +92,79 @@ class OwnerLinksPage(QWidget):
     def _setup_styles(self):
         self.setStyleSheet("""
             OwnerLinksPage { background:#fafafa; }
-            QTabWidget#modernTabs::pane { border:none; background:#fff; margin-top:0; }
+            
+            /* עיצוב טאבים בגווני כחול-סגול אחיד */
+            QTabWidget#modernTabs::pane { 
+                border:none; 
+                background:#fff; 
+                margin-top:0; 
+            }
             QTabBar::tab {
-                background:transparent; color:#6b7280; border:none;
-                padding:12px 24px; margin:0 8px; min-width:120px; font-weight:500; font-size:14px;
+                background:transparent; 
+                color:#6b7280; 
+                border:none;
+                padding:12px 24px; 
+                margin:0 8px; 
+                min-width:120px; 
+                font-weight:500; 
+                font-size:14px;
             }
-            QTabBar::tab:selected { color:#3b82f6; font-weight:600; border-bottom:2px solid #3b82f6; }
-            QTabBar::tab:hover:!selected { color:#374151; }
+            QTabBar::tab:selected { 
+                color:#3b82f6; 
+                font-weight:600; 
+                border-bottom:2px solid #3b82f6; 
+            }
+            QTabBar::tab:hover:!selected { 
+                color:#374151; 
+            }
 
+            /* כפתורים עיקריים - בגווני כחול-סגול אחיד */
             QPushButton {
-                background:#10b981; color:#fff; border:1px solid #059669; border-radius:6px;
-                padding:8px 16px; font-weight:600; min-width:100px;
+                background:#3b82f6; 
+                color:#fff; 
+                border:1px solid #2563eb; 
+                border-radius:8px;
+                padding:8px 16px; 
+                font-weight:600; 
+                min-width:100px;
+                font-size:14px;
             }
-            QPushButton:hover { background:#059669; border-color:#047857; }
-            QPushButton:pressed { background:#047857; border-color:#065f46; }
+            QPushButton:hover { 
+                background:#2563eb; 
+                border-color:#1d4ed8; 
+                transform: translateY(-1px);
+            }
+            QPushButton:pressed { 
+                background:#1d4ed8; 
+                border-color:#1e40af; 
+                transform: translateY(0px);
+            }
 
+            /* כרטיסי ספקים רגילים */
             QWidget[objectName="card"] {
-                background:#fff; border:1px solid #e5e7eb; border-radius:8px; margin-bottom:4px;
+                background:#fff; 
+                border:1px solid #e5e7eb; 
+                border-radius:10px; 
+                margin-bottom:4px;
+                padding:4px;
             }
-            QWidget[objectName="card"]:hover { border-color:#d1d5db; box-shadow:0 1px 3px rgba(0,0,0,.1); }
+            QWidget[objectName="card"]:hover { 
+                border-color:#3b82f6; 
+                box-shadow:0 4px 6px rgba(59, 130, 246, 0.1); 
+            }
 
+            /* כרטיסי בקשות ממתינות - בגווני כחול-סגול עדין */
             QWidget[objectName="pendingCard"] {
-                background:#fff; border:1px solid #f59e0b; border-radius:8px; margin-bottom:4px;
+                background:#fff; 
+                border:1px solid #a855f7; 
+                border-radius:10px; 
+                margin-bottom:4px;
+                padding:4px;
             }
-            QWidget[objectName="pendingCard"]:hover { border-color:#d97706; box-shadow:0 1px 3px rgba(245,158,11,.2); }
+            QWidget[objectName="pendingCard"]:hover { 
+                border-color:#7c3aed; 
+                box-shadow:0 4px 6px rgba(168, 85, 247, 0.15); 
+            }
         """)
 
     # --- UI cards ---
@@ -174,7 +223,7 @@ class OwnerLinksPage(QWidget):
         main_layout.setSpacing(16)
 
         status_dot = QLabel("●")
-        status_dot.setStyleSheet("color: #f59e0b; font-size: 16px;")
+        status_dot.setStyleSheet("color: #a855f7; font-size: 16px;")
         status_dot.setFixedWidth(16)
         main_layout.addWidget(status_dot, 0, Qt.AlignCenter)
 
@@ -238,7 +287,7 @@ class OwnerLinksPage(QWidget):
         main_layout.setSpacing(16)
 
         status_dot = QLabel("●")
-        status_dot.setStyleSheet("color: #10b981; font-size: 16px;")
+        status_dot.setStyleSheet("color: #3b82f6; font-size: 16px;")
         status_dot.setFixedWidth(16)
         main_layout.addWidget(status_dot, 0, Qt.AlignCenter)
 

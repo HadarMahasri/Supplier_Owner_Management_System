@@ -79,7 +79,7 @@ class StoreOwnerOrdersRow(QWidget):
         status_label.setMaximumWidth(120)
         layout.addWidget(status_label)
         
-        # סכום - יישור לימין
+        # סכום - יישור למימין
         total = self.order.get("total_amount", 0)
         amount_label = QLabel(f"₪ {total:,.2f}")
         amount_label.setObjectName("orderCell")
@@ -88,11 +88,11 @@ class StoreOwnerOrdersRow(QWidget):
         amount_label.setMaximumWidth(140)
         layout.addWidget(amount_label)
         
-        # שם ספק - יישור לימין לטקסט עברי
+        # שם ספק - יישור למימין לטקסט עברי
         supplier_name = self.order.get("owner_company", "ספק לא ידוע")
         supplier_label = QLabel(supplier_name)
         supplier_label.setObjectName("orderCell")
-        supplier_label.setAlignment(Qt.AlignRight)  # יישור לימין לעברית
+        supplier_label.setAlignment(Qt.AlignRight)  # יישור למימין לעברית
         supplier_label.setMinimumWidth(200)
         supplier_label.setMaximumWidth(200)
         layout.addWidget(supplier_label)
@@ -247,8 +247,6 @@ class StoreOwnerOrdersRow(QWidget):
                 time_layout.setSpacing(8)
                 time_layout.setDirection(QHBoxLayout.RightToLeft)
 
-
-                
                 hours_label = QLabel("שעת הזמנה:")
                 hours_label.setObjectName("detailLabel")
                 hours_value = QLabel(f"{time_str}")
@@ -265,7 +263,7 @@ class StoreOwnerOrdersRow(QWidget):
         
         layout.addLayout(info_layout)
         
-        # טבלת מוצרים
+        # טבלת מוצרים - עם סדר מימין לשמאל
         items = self.order.get("items", [])
         if items:
             products_label = QLabel("פירוט מוצרים:")
@@ -274,16 +272,41 @@ class StoreOwnerOrdersRow(QWidget):
             
             table = QTableWidget()
             table.setColumnCount(4)
-            table.setHorizontalHeaderLabels(["מספר מוצר", "שם מוצר", "כמות", "מחיר יחידה"])
+            # סדר הכותרות מימין לשמאל: מספר מוצר, שם מוצר, מחיר יחידה, כמות
+            table.setHorizontalHeaderLabels(["מספר מוצר", "שם מוצר", "מחיר יחידה", "כמות"])
             table.setRowCount(len(items))
             
-            for row, item in enumerate(items):
-                table.setItem(row, 0, QTableWidgetItem(str(item.get("product_id", ""))))
-                table.setItem(row, 1, QTableWidgetItem(item.get("product_name", "")))
-                table.setItem(row, 2, QTableWidgetItem(str(item.get("quantity", 0))))
-                table.setItem(row, 3, QTableWidgetItem(f"₪ {item.get('unit_price', 0):.2f}"))
+            # הגדרת כיוון RTL לטבלה
+            table.setLayoutDirection(Qt.RightToLeft)
             
-            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+            # סדר הנתונים בטבלה מימין לשמאל
+            for row, item in enumerate(items):
+                # עמודה 0: מספר מוצר (מימין ביותר)
+                product_id_item = QTableWidgetItem(str(item.get("product_id", "")))
+                product_id_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 0, product_id_item)
+                
+                # עמודה 1: שם מוצר
+                product_name_item = QTableWidgetItem(item.get("product_name", ""))
+                product_name_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 1, product_name_item)
+                
+                # עמודה 2: מחיר יחידה
+                unit_price_item = QTableWidgetItem(f"₪ {item.get('unit_price', 0):.2f}")
+                unit_price_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 2, unit_price_item)
+                
+                # עמודה 3: כמות (שמאל ביותר)
+                quantity_item = QTableWidgetItem(str(item.get("quantity", 0)))
+                quantity_item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, 3, quantity_item)
+            
+            # הגדרת רוחב עמודות
+            table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeToContents)  # מספר מוצר
+            table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)  # שם מוצר - יתרחב
+            table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeToContents)  # מחיר יחידה
+            table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeToContents)  # כמות
+            
             table.setAlternatingRowColors(True)
             
             layout.addWidget(table)
@@ -394,6 +417,7 @@ class StoreOwnerOrdersRow(QWidget):
             padding: 10px;
             border: 1px solid #e5e7eb;
             font-weight: 600;
+            text-align: center;
         }
         
         /* Container כללי */

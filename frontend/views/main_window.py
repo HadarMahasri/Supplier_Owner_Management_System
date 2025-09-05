@@ -10,7 +10,6 @@ from pathlib import Path
 from views.pages.login_page import LoginPage
 from views.pages.signup_page import SignUpPage
 from views.pages.supplier_home import SupplierHome
-# שינוי - ייבוא מהקובץ המעודכן
 from views.pages.store_owner_home import StoreOwnerHome
 
 

@@ -12,9 +12,6 @@ from views.widgets.store_owner_orders_widget import StoreOwnerOrdersWidget
 from views.widgets.side_menu_store_owner import SideMenu
 from views.pages.owner_links_page import OwnerLinksPage
 from views.pages.order_create_page import OrderCreatePage
-from views.pages.ai_chat_page import AIChatPage
-
-
 
 
 class StoreOwnerHome(QWidget):
@@ -63,7 +60,7 @@ class StoreOwnerHome(QWidget):
         suppliers_page = OwnerLinksPage(owner_id, open_order_inline=self.open_order_inline)
         self.content_stack.addWidget(suppliers_page)
 
-        # index 2: New Order (נטען דינאמית בכל פתיחה)
+        # index 2: New Order (נטען דינמית בכל פתיחה)
         placeholder = QWidget()
         self.content_stack.addWidget(placeholder)
 
@@ -72,11 +69,6 @@ class StoreOwnerHome(QWidget):
 
         self.content_stack.setCurrentIndex(0)
         self.create_side_menu()
-
-        # index 3: AI Chat
-        owner_id = self.user_data.get('id')
-        ai_chat_page = AIChatPage(owner_id)
-        self.content_stack.addWidget(ai_chat_page)
 
     def create_side_menu(self):
         self.side_menu = SideMenu(self)
@@ -99,7 +91,7 @@ class StoreOwnerHome(QWidget):
         layout.setSpacing(12)
 
         # Actions - צד שמאל (הכפתורים בסדר: התנתק, רשימת הזמנות, הזמנה חדשה)
-                # כפתור התנתקות בצד שמאל
+        # כפתור התנתקות בצד שמאל
         logout_btn = QPushButton("התנתק")
         logout_btn.setObjectName("ghostBtn")
         logout_btn.clicked.connect(self.logout_requested.emit)
@@ -132,7 +124,7 @@ class StoreOwnerHome(QWidget):
         menu_btn.setFixedSize(40, 40)
         menu_btn.clicked.connect(self.toggle_side_menu)
 
-        # סידור כללי בלייאוט הראשי
+        # סידור כללי בליאות הראשי
         layout.addWidget(logout_btn)       # שמאל
         layout.addWidget(title, 1)         # מרכז עם stretch
         layout.addLayout(nav_layout)       # ימין
@@ -170,7 +162,7 @@ QPushButton#ghostBtn:hover {
     background:#fef2f2; border-color:#b91c1c; color:#dc2626; 
 }""")
 
-    # ===== ניווט לבצוע הזמנת ספק (inline) =====
+    # ===== ניווט לביצוע הזמנת ספק (inline) =====
     def open_order_inline(self, supplier_id: int):
         owner_id = self.user_data.get('id', 1)
         order_page = OrderCreatePage(owner_id, supplier_id, self)
@@ -203,10 +195,7 @@ QPushButton#ghostBtn:hover {
         elif page == "new_order":
             self.content_stack.setCurrentIndex(2)
             self.update_buttons_state("new_order")
-        elif page == "ai_chat":
-          self.content_stack.setCurrentIndex(3)
-           # בצ'אט אין "כפתור פעיל" מתוך השניים — נשאיר שניהם כ-secondary
-          self.update_buttons_state("ai_chat")
+        # הסרנו את הטיפול ב-ai_chat
 
     def show_orders_page(self): self.show_page("orders")
     def show_new_order_page(self): self.show_suppliers_page()
