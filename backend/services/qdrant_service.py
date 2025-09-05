@@ -45,7 +45,7 @@ class QdrantService:
             logger.error(f"Qdrant health failed: {e}")
             return False
 
-    def search(self, vector: List[float], limit: int = 3) -> List[str]:
+    def search(self, vector: List[float], limit: int = 3,filter_: dict = None) -> List[str]:
         """חיפוש מהיר עם מטמון"""
         try:
             # יצירת מפתח מטמון
@@ -69,6 +69,8 @@ class QdrantService:
                 "with_vector": False  # לא צריך את הוקטור בחזרה - חוסך רוחב פס
             }
             
+            if filter_:
+                payload["filter"] = filter_
             start_time = time.time()
             response = self.session.post(url, json=payload, timeout=self.timeout)
             duration = time.time() - start_time

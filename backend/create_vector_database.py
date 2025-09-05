@@ -92,19 +92,37 @@ def main():
     )
 
     points = []
+    UI_TERMS = ["רשימת הזמנות","רשימת ספקים","הזמנה חדשה","חיבורים","בקשות ממתינות","ניהול מוצרים"]
+
     for i, chunk in enumerate(chunks):
         emb = get_embedding(chunk)
-        if not emb or len(emb) != VECTOR_SIZE:
-            logger.warning(f"bad embedding for chunk {i}")
+        if not emb:
             continue
-        points.append(PointStruct(id=i, vector=emb, payload={"text": chunk, "chunk_id": i}))
+
+        role = "Any"
+        if "[OWNER]" in chunk:
+            role = "StoreOwner"
+        elif "[SUPPLIER]" in chunk:
+            role = "Supplier"
+
+        meta = {
+            "text": chunk,
+            "type": "how_to" if "[HOWTO]" in chunk else "doc",
+            "role": role,
+            "title": chunk.split("\n", 1)[0].strip(),
+            "ui_terms": [t for t in UI_TERMS if t in chunk]
+        }
+
+        points.append(PointStruct(id=i, vector=emb, payload=meta))
 
     if not points:
         logger.error("no points to upsert")
         return 1
 
     client.upsert(collection_name=COLLECTION_NAME, points=points)
+    client = QdrantClient(url=QDRANT_URL)
     info = client.get_collection(COLLECTION_NAME)
+    client.upsert(collection_name=COLLECTION_NAME, points=points)
     logger.info(f"done. points_count={info.points_count}")
     return 0
 

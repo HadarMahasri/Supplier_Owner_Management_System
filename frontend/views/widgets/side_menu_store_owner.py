@@ -35,9 +35,7 @@ class SideMenu(QFrame):
             ("orders", "רשימת הזמנות"),
             ("new_order", "יצירת הזמנה חדשה"),
             ("suppliers", "רשימת ספקים"),
-            ("reports", "דוחות הזמנות"),
-            ("settings", "הגדרות חנות"),
-            ("ai_chat", "שיחה עם נציג AI"),
+            ("ai_chat", "שיחה עם העוזר הדיגיטלי")
         ]
 
         menu_container = QWidget()

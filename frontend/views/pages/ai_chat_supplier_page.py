@@ -1,4 +1,4 @@
-# frontend/views/pages/ai_chat_page.py
+# frontend/views/pages/ai_chat_supplier_page.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, 
     QFrame, QScrollArea, QLineEdit, QMessageBox, QProgressBar
@@ -115,14 +115,14 @@ class ChatProgressBar(QProgressBar):
         super().__init__(parent)
         self.setStyleSheet("""
             QProgressBar {
-                border: 1px solid #dbeafe;
+                border: 1px solid #dcfce7;
                 border-radius: 8px;
                 text-align: center;
-                background-color: #f8fafc;
+                background-color: #f0fdf4;
                 height: 6px;
             }
             QProgressBar::chunk {
-                background-color: #3b82f6;
+                background-color: #10b981;
                 border-radius: 6px;
             }
         """)
@@ -183,8 +183,8 @@ class ChatBubble(QFrame):
             layout.addWidget(bubble)
             layout.addStretch()
 
-class AIChatPage(QWidget):
-    """עמוד צ'אט AI בעיצוב כחול לבעל חנות"""
+class AIChatSupplierPage(QWidget):
+    """עמוד צ'אט AI בעיצוב ירוק לספק"""
     
     def __init__(self, user_data: Dict, api_url: str = None):
         super().__init__()
@@ -227,7 +227,7 @@ class AIChatPage(QWidget):
         title_label = QLabel("🤖 שיחה עם העוזר הדיגיטלי")
         title_label.setObjectName("chatTitle")
         
-        user_name = self.user_data.get('contact_name', 'בעל חנות')
+        user_name = self.user_data.get('contact_name', 'ספק')
         company_name = self.user_data.get('company_name', '')
         info_text = f"שלום {user_name}"
         if company_name:
@@ -291,15 +291,15 @@ class AIChatPage(QWidget):
         main_layout.addWidget(input_frame)
     
     def setup_styles(self):
-        """הגדרת העיצוב עם גווני כחול לבעל חנות"""
+        """הגדרת העיצוב עם גווני ירוק לספק"""
         self.setStyleSheet("""
-            AIChatPage {
-                background-color: #f0f4f8;
+            AIChatSupplierPage {
+                background-color: #f0fdf4;
             }
             
             QFrame#chatHeader {
                 background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                    stop:0 #3b82f6, stop:1 #1e40af);
+                    stop:0 #10b981, stop:1 #047857);
                 border: none;
                 border-radius: 12px;
             }
@@ -311,33 +311,33 @@ class AIChatPage(QWidget):
             }
             
             QLabel#chatInfo {
-                color: #dbeafe;
+                color: #a7f3d0;
                 font-size: 12px;
             }
             
             QFrame#inputFrame {
                 background-color: white;
-                border: 1px solid #dbeafe;
+                border: 1px solid #dcfce7;
                 border-radius: 12px;
                 margin: 3px;
             }
             
             QLineEdit#messageInput {
-                border: 2px solid #dbeafe;
+                border: 2px solid #dcfce7;
                 border-radius: 16px;
                 padding: 10px 16px;
                 font-size: 14px;
-                background-color: #f8fafc;
+                background-color: #f0fdf4;
             }
             
             QLineEdit#messageInput:focus {
-                border-color: #3b82f6;
+                border-color: #10b981;
                 background-color: white;
                 outline: none;
             }
             
             QPushButton#sendButton {
-                background-color: #3b82f6;
+                background-color: #10b981;
                 color: white;
                 border: none;
                 border-radius: 16px;
@@ -348,11 +348,11 @@ class AIChatPage(QWidget):
             }
             
             QPushButton#sendButton:hover {
-                background-color: #2563eb;
+                background-color: #059669;
             }
             
             QPushButton#sendButton:pressed {
-                background-color: #1d4ed8;
+                background-color: #047857;
             }
             
             QPushButton#sendButton:disabled {
@@ -373,7 +373,7 @@ class AIChatPage(QWidget):
             }
             
             QFrame[objectName="userBubble"] {
-                background-color: #3b82f6;
+                background-color: #10b981;
                 border-radius: 16px;
                 margin: 2px;
             }
@@ -386,7 +386,7 @@ class AIChatPage(QWidget):
             
             QFrame[objectName="botBubble"] {
                 background-color: white;
-                border: 1px solid #dbeafe;
+                border: 1px solid #dcfce7;
                 border-radius: 16px;
                 margin: 2px;
             }
@@ -404,14 +404,15 @@ class AIChatPage(QWidget):
         """)
     
     def add_welcome_message(self):
-        """הוספת הודעת ברוכים הבאים מקוצרת"""
-        user_name = self.user_data.get('contact_name', 'בעל חנות')
+        """הוספת הודעת ברוכים הבאים מקוצרת לספק"""
+        user_name = self.user_data.get('contact_name', 'ספק')
         welcome_text = f"""שלום {user_name}! אני העוזר הדיגיטלי המהיר שלך במערכת הספקים.
 
 🚀 אני כאן כדי לעזור עם:
 • ניהול הזמנות ומעקב סטטוס
-• חיפוש ספקים ומוצרים
-• יצירת קשרים עם ספקים
+• ניהול מוצרים ומלאי
+• יצירת קשרים עם בעלי חנויות
+• דוחות מכירות ומעקב
 • שאלות כלליות על המערכת
 
 פשוט כתוב את שאלתך ואני אענה במהירות!"""
@@ -424,7 +425,6 @@ class AIChatPage(QWidget):
         message = self.message_input.text().strip()
         if not message:
             return
-        self.last_message = message
         
         # בדיקת מטמון מקומי
         cache_key = f"{self.user_id}:{hash(message.lower())}"

@@ -189,6 +189,25 @@ class ChatService:
                 del self.embedding_cache[oldest]
         
         return embedding
+    
+        # ===== Reranker פרוצדורלי ל-How-To =====
+    _PROCEDURAL = ["לחץ","לחצי","בחר","בחרי","פתח","פתחי","שמור","שמרי","אשר","אשרי","שלח","שלחי"]
+    _UI_TERMS   = ["רשימת הזמנות","רשימת ספקים","הזמנה חדשה","חיבורים","בקשות ממתינות","ניהול מוצרים"]
+
+    def _score_proc(self, text: str) -> float:
+        """ניקוד קטעים הוראתיים: פעלים פרוצדורליים + שמות UI; קנס קל לאורך מוגזם."""
+        t = (text or "")
+        tl = t.lower()
+        verb_hits = sum(1 for v in self._PROCEDURAL if v in tl)
+        ui_hits   = sum(1 for u in self._UI_TERMS if u in t)
+        length_penalty = 0.2 if len(t) > 600 else 0.0
+        return verb_hits * 1.5 + ui_hits * 1.2 - length_penalty
+
+    def _rerank_proc(self, chunks: List[str]) -> List[str]:
+        """מסדר קטעים לפי ציון פרוצדורלי (גבוה→נמוך)."""
+        scored = sorted(((c, self._score_proc(c)) for c in chunks if c),
+                        key=lambda x: x[1], reverse=True)
+        return [s for s, _ in scored]
 
     def _classify_question_type(self, message: str, user_context: Dict = None) -> str:
         """סיווג מהיר של שאלה"""
@@ -211,9 +230,11 @@ class ChatService:
     def _enhance_search_query(self, query: str, question_type: str, user_context: Dict) -> str:
         """שיפור מהיר של שאילתת חיפוש"""
         user_type = user_context.get("userType", "").lower()
-        
+        if question_type == "how_to":
+            q += " מדריך הוראות שלבים לחץ לחצי בחר בחרי פתח פתחי שמור אשר 'רשימת הזמנות' 'רשימת ספקים' 'הזמנה חדשה' 'חיבורים' 'בקשות ממתינות' 'ניהול מוצרים'"
+
         # הוספה מינימלית של הקשר
-        if question_type == "orders" and "supplier" in user_type:
+        elif question_type == "orders" and "supplier" in user_type:
             return f"{query} ספק הזמנות ניהול"
         elif question_type == "products" and "supplier" in user_type:
             return f"{query} ספק מוצרים הוספה"
@@ -241,121 +262,287 @@ class ChatService:
         self, user_id: int, message: str, user_context: Dict, db: Session = None
     ) -> Dict[str, Optional[str]]:
         """
-        עיבוד מואץ של הודעת צ'אט עם נתוני משתמש
+        עיבוד הודעת צ'אט עם RAG מואץ:
+        - how_to: תמיד דרך RAG (מסונן לקטעי HOWTO ולפי תפקיד), ללא קיצור-DB.
+        - אחר: ניסיון תשובה מהירה ממסד הנתונים ואז RAG רגיל.
+        - כולל מטמון מלא (response_cache) ומדדים להצלבה ב־UI.
         """
+        import time, hashlib
         start_time = time.time()
-        
-        try:
-            # בדיקת מטמון תגובות מלא
-            cache_key = f"{user_id}:{hashlib.md5(message.strip().lower().encode()).hexdigest()}"
-            if cache_key in self.response_cache:
-                cached = self.response_cache[cache_key]
-                if time.time() - cached["timestamp"] < 600:  # 10 דקות
-                    logger.info(f"Full cache hit for user {user_id}")
-                    result = cached["data"].copy()
-                    result["response_time"] = round(time.time() - start_time, 2)
-                    result["from_cache"] = True
-                    return result
 
-            # סיווג מהיר
-            question_type = self._classify_question_type(message, user_context)
-            
-            # נסיון לתשובה מהירה מהדטבייס למספרים בסיסיים
-            quick_answer = self._try_quick_numeric_answer(message, user_id, user_context, db)
-            if quick_answer:
+        try:
+            question = (message or "").strip()
+            if not question:
                 return {
-                    "success": True,
-                    "message": "תשובה מהירה מנתוני המערכת",
-                    "response": quick_answer,
-                    "user_type": user_context.get("userType"),
+                    "success": False,
+                    "message": "שגיאה",
+                    "response": "לא התקבלה שאלה.",
+                    "user_type": (user_context or {}).get("userType"),
                     "contexts_found": 0,
                     "dynamic_context_used": False,
                     "response_time": round(time.time() - start_time, 2),
                 }
 
-            # חיפוש RAG מהיר
-            enhanced_query = self._enhance_search_query(message, question_type, user_context)
-            embedding = self._get_embedding_cached(enhanced_query)
-            
+            # ===== מטמון תשובה מלאה =====
+            cache_key = f"{user_id}:{hashlib.md5(question.lower().encode()).hexdigest()}"
+            cached = self.response_cache.get(cache_key)
+            if cached and time.time() - cached["timestamp"] < 600:
+                result = dict(cached["data"])
+                result["response_time"] = round(time.time() - start_time, 2)
+                result["from_cache"] = True
+                return result
+
+            # ===== סיווג שאלה =====
+            try:
+                question_type = self._classify_question_type(question, user_context)
+            except Exception:
+                question_type = "general"
+
+            # ===== קיצור-DB: מדדים מספריים (לא להריץ ב-how_to) =====
+            if question_type != "how_to":
+                try:
+                    quick_answer = self._try_answer_numeric_metrics(question, user_id, user_context, db)
+                except Exception:
+                    quick_answer = None
+                if quick_answer:
+                    result = {
+                        "success": True,
+                        "message": "תשובה מהירה מנתוני המערכת",
+                        "response": quick_answer,
+                        "user_type": (user_context or {}).get("userType"),
+                        "contexts_found": 0,
+                        "dynamic_context_used": False,
+                        "response_time": round(time.time() - start_time, 2),
+                    }
+                    # מטמון
+                    self.response_cache[cache_key] = {"data": dict(result), "timestamp": time.time()}
+                    if len(self.response_cache) > self.cache_max_size:
+                        oldest = min(self.response_cache.keys(), key=lambda k: self.response_cache[k]["timestamp"])
+                        self.response_cache.pop(oldest, None)
+                    return result
+
+            # ===== RAG: הכנת שאילתה + embedding =====
+            try:
+                enhanced_query = self._enhance_search_query(question, question_type, user_context)
+            except Exception:
+                enhanced_query = question
+
+            try:
+                embedding = self._get_embedding_cached(enhanced_query or question)
+            except Exception:
+                embedding = None
+
             if not embedding:
-                return self._create_error_response("לא הצלחתי לעבד את השאלה", user_context, start_time)
+                return {
+                    "success": False,
+                    "message": "לא הצלחתי לעבד את השאלה",
+                    "response": "נסה לנסח מחדש את השאלה.",
+                    "user_type": (user_context or {}).get("userType"),
+                    "contexts_found": 0,
+                    "dynamic_context_used": False,
+                    "response_time": round(time.time() - start_time, 2),
+                }
 
-            # חיפוש מהיר יותר
-            search_limit = 3 if question_type != "how_to" else 4
-            snippets = self.qdrant_service.search(embedding, limit=search_limit)
-            
-            context = "\n---\n".join(snippets) if snippets else "מידע כללי על המערכת"
-            
-            # יצירת prompt מינימלי
-            prompt = self._create_minimal_prompt(context, message, user_context)
-            
-            # יצירת תשובה
-            answer = self.ollama_service.generate_response(context, message)
-            
+            # ===== חיפוש ב-Qdrant =====
+            contexts_found = 0
+            static_snippets: List[str] = []
+            search_limit = 5 if question_type in ("how_to", "support") else 3
+
+            if self.qdrant_service:
+                try:
+                    if question_type == "how_to":
+                        # סינון לקטעי HOWTO ולפי תפקיד המשתמש
+                        role = (user_context or {}).get("userType") or (user_context or {}).get("role") or "Any"
+                        flt = {"must": [{"key": "type", "match": {"value": "how_to"}}]}
+                        if role in ("StoreOwner", "Supplier"):
+                            flt["must"].append({"key": "role", "match": {"value": role}})
+                        static_snippets = self.qdrant_service.search(embedding, limit=6, filter_=flt) or []  # דורש search(filter_) בשירות
+                        # ריראנקר פרוצדורלי אם קיים
+                        if hasattr(self, "_rerank_proc"):
+                            static_snippets = self._rerank_proc(static_snippets)[:6]
+                    else:
+                        static_snippets = self.qdrant_service.search(embedding, limit=search_limit) or []
+                    contexts_found = len(static_snippets)
+                except Exception:
+                    static_snippets = []
+                    contexts_found = 0
+
+            # ===== הקשר סופי =====
+            context = "\n---\n".join(static_snippets) if static_snippets else "אין הקשר זמין. ענה בזהירות וללא ניחושים."
+
+            # ===== יצירת prompt/תשובה =====
+            try:
+                # אם יש לך פרומפט מינימלי מותאם – השארנו כפי שהיה
+                prompt = self._create_minimal_prompt(context, question, user_context)
+            except Exception:
+                # נפילה לפרומפט בסיסי
+                prompt = f"הקשר:\n{context}\n\nשאלה: {question}\nענה בעברית, קצר וברור."
+
+            try:
+                answer = self.ollama_service.generate_response(context, question)  # הממשק הקיים אצלך
+            except Exception as e:
+                return {
+                    "success": False,
+                    "message": f"שגיאה ביצירת תשובה: {e}",
+                    "response": "אירעה שגיאה בעת יצירת התשובה.",
+                    "user_type": (user_context or {}).get("userType"),
+                    "contexts_found": contexts_found,
+                    "dynamic_context_used": False,
+                    "response_time": round(time.time() - start_time, 2),
+                }
+
             if not answer:
-                return self._create_error_response("לא הצלחתי ליצור תשובה", user_context, start_time)
+                return {
+                    "success": False,
+                    "message": "לא הצלחתי ליצור תשובה",
+                    "response": "נסה לשאול מחדש או לנסח אחרת.",
+                    "user_type": (user_context or {}).get("userType"),
+                    "contexts_found": contexts_found,
+                    "dynamic_context_used": False,
+                    "response_time": round(time.time() - start_time, 2),
+                }
 
+            # ===== תוצאת הצלחה + מטמון =====
             result = {
                 "success": True,
-                "message": "תשובה נוצרה בהצלחה",
+                "message": "תשובה מבוססת RAG",
                 "response": answer,
-                "user_type": user_context.get("userType"),
-                "contexts_found": len(snippets),
+                "user_type": (user_context or {}).get("userType"),
+                "contexts_found": contexts_found,
                 "dynamic_context_used": False,
                 "response_time": round(time.time() - start_time, 2),
             }
-            
-            # שמירה במטמון
-            self.response_cache[cache_key] = {
-                "data": result.copy(),
-                "timestamp": time.time()
-            }
-            
-            # ניקוי מטמון
+
+            self.response_cache[cache_key] = {"data": dict(result), "timestamp": time.time()}
             if len(self.response_cache) > self.cache_max_size:
-                oldest = min(self.response_cache.keys(), 
-                           key=lambda k: self.response_cache[k]["timestamp"])
-                del self.response_cache[oldest]
+                oldest = min(self.response_cache.keys(), key=lambda k: self.response_cache[k]["timestamp"])
+                self.response_cache.pop(oldest, None)
 
             return result
 
         except Exception as e:
             logger.error(f"Error in process_chat_message_with_context: {e}")
-            return self._create_error_response(f"שגיאה: {str(e)}", user_context, start_time)
+            return {
+                "success": False,
+                "message": f"שגיאה: {str(e)}",
+                "response": "אירעה שגיאה בעיבוד הבקשה.",
+                "user_type": (user_context or {}).get("userType"),
+                "contexts_found": 0,
+                "dynamic_context_used": False,
+                "response_time": round(time.time() - start_time, 2),
+            }
 
-    def _try_quick_numeric_answer(self, message: str, user_id: int, user_context: Dict, db: Session) -> Optional[str]:
-        """תשובה מהירה למספרים בסיסיים"""
+
+    def _try_answer_numeric_metrics(self, message: str, user_id: int, user_context: Dict, db: Session):
+        """
+        מענה דטרמיניסטי לשאלות מספריות (כמה/מספר) – הזמנות, מוצרים, חיבורים.
+        כולל תמיכה בסטטוסים: בוצעה, בתהליך, הושלמה.
+        """
         if not db:
             return None
-            
-        msg = message.lower()
-        
-        # בדיקה אם זו שאלה מספרית
-        if not any(k in msg for k in ["כמה", "מספר", "כמה יש"]):
+
+        q = (message or "").lower()
+
+        # זיהוי אם זו בכלל שאלה מספרית
+        asks_any_count = any(k in q for k in ["כמה", "מספר", "מס'", "סה\"כ", "סך", "כמה יש"])
+        if not asks_any_count:
             return None
 
-        user_type = user_context.get("userType", "")
-        
-        try:
-            if "הזמנות" in msg and user_type == "Supplier":
-                count = db.execute(text("""
-                    SELECT COUNT(*) FROM orders o 
-                    JOIN order_items oi ON o.id = oi.order_id
-                    JOIN products p ON oi.product_id = p.id
-                    WHERE p.supplier_id = :uid AND o.status = N'בתהליך'
-                """), {"uid": user_id}).scalar()
-                return f"יש לך {count or 0} הזמנות פעילות."
-                
-            elif "מוצרים" in msg and user_type == "Supplier":
-                count = db.execute(text("""
-                    SELECT COUNT(*) FROM products WHERE supplier_id = :uid AND is_active = 1
-                """), {"uid": user_id}).scalar()
-                return f"יש לך {count or 0} מוצרים פעילים."
-                
-        except Exception:
-            pass
-            
+        # קטגוריות
+        asks_orders   = any(k in q for k in ["הזמנה", "הזמנות", "סטטוס"])
+        asks_products = any(k in q for k in ["מוצר", "מוצרים", "קטלוג", "מלאי"])
+        asks_links    = any(k in q for k in ["חיבור", "קישור", "קישורים", "חיבורים"])
+
+        # סטטוסים
+        wants_pending   = any(k in q for k in ["בתהליך", "ממתין", "ממתינות", "pending", "פתוח", "פתוחה", "פתוחות", "פתוחים"])
+        wants_completed = any(k in q for k in ["הושלמ", "הושלמה", "הושלמו", "completed"])
+        wants_done      = any(k in q for k in ["בוצע", "בוצעה", "בוצעו"])
+        wants_outofstock= any(k in q for k in ["אזל", "אזלו", "חסר", "נגמר"])
+
+        # סוג המשתמש (גם role וגם userType)
+        ut = (user_context or {}).get("userType") or (user_context or {}).get("role") or ""
+
+        if ut == "Supplier":
+            # ספירה לספק
+            row = db.execute(text("""
+                SELECT
+                    COUNT(p.id) AS products_count,
+                    COUNT(CASE WHEN p.stock = 0 THEN 1 END) AS out_of_stock,
+                    COUNT(CASE WHEN o.status = N'בתהליך' THEN 1 END) AS pending_orders,
+                    COUNT(CASE WHEN o.status = N'הושלמה' THEN 1 END) AS completed_orders,
+                    COUNT(CASE WHEN o.status = N'בוצעה' THEN 1 END) AS done_orders,
+                    COUNT(DISTINCT o.id) AS total_orders
+                FROM products p
+                LEFT JOIN order_items oi ON oi.product_id = p.id
+                LEFT JOIN orders o ON o.id = oi.order_id
+                WHERE p.supplier_id = :uid AND p.is_active = 1
+            """), {"uid": user_id}).fetchone()
+
+            products_count  = (row.products_count or 0)
+            out_of_stock    = (row.out_of_stock or 0)
+            pending_orders  = (row.pending_orders or 0)
+            completed_orders= (row.completed_orders or 0)
+            done_orders     = (row.done_orders or 0)
+            total_orders    = (row.total_orders or 0)
+
+            if asks_orders:
+                if wants_pending:
+                    return f"יש {pending_orders} הזמנות פתוחות (בתהליך)."
+                elif wants_completed:
+                    return f"הושלמו {completed_orders} הזמנות."
+                elif wants_done:
+                    return f"בוצעו {done_orders} הזמנות."
+                else:
+                    return f"סה\"כ יש {total_orders} הזמנות."
+            if asks_products:
+                if wants_outofstock:
+                    return f"{out_of_stock} מוצרים אזלו מהמלאי."
+                else:
+                    return f"יש {products_count} מוצרים פעילים."
+            if asks_links:
+                links_row = db.execute(text("""
+                    SELECT COUNT(*) AS active_links
+                    FROM links
+                    WHERE supplier_id = :uid AND status = N'פעיל'
+                """), {"uid": user_id}).fetchone()
+                return f"יש לך {links_row.active_links or 0} חיבורים פעילים עם בעלי חנויות."
+
+        elif ut == "StoreOwner":
+            row = db.execute(text("""
+                SELECT
+                    COUNT(o.id) AS total_orders,
+                    COUNT(CASE WHEN o.status = N'בתהליך' THEN 1 END) AS pending,
+                    COUNT(CASE WHEN o.status = N'הושלמה' THEN 1 END) AS completed,
+                    COUNT(CASE WHEN o.status = N'בוצעה' THEN 1 END) AS done
+                FROM orders o
+                WHERE o.owner_id = :uid
+            """), {"uid": user_id}).fetchone()
+
+            total_orders = (row.total_orders or 0)
+            pending      = (row.pending or 0)
+            completed    = (row.completed or 0)
+            done         = (row.done or 0)
+
+            if asks_orders:
+                if wants_pending:
+                    return f"יש {pending} הזמנות פתוחות (בתהליך)."
+                elif wants_completed:
+                    return f"הושלמו {completed} הזמנות."
+                elif wants_done:
+                    return f"בוצעו {done} הזמנות."
+                else:
+                    return f"סה\"כ יש {total_orders} הזמנות."
+            if asks_links:
+                links_row = db.execute(text("""
+                    SELECT COUNT(*) AS active_links
+                    FROM links
+                    WHERE owner_id = :uid AND status = N'פעיל'
+                """), {"uid": user_id}).fetchone()
+                return f"יש לך {links_row.active_links or 0} חיבורים פעילים עם ספקים."
+            # לבעל חנות אין מוצרים משלו
+
         return None
+
 
     def _create_error_response(self, message: str, user_context: Dict, start_time: float) -> Dict:
         """יצירת תגובת שגיאה סטנדרטית"""

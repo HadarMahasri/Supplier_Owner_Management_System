@@ -9,9 +9,9 @@ import os
 from typing import Dict
 import json, datetime
 
-
-# Import the new orders page instead of the old widget
-from views.pages.supplier_orders_page import SupplierOrdersPage  # שינוי חשוב!
+# ייבוא עמוד הצ'אט החדש לספק
+from views.pages.ai_chat_supplier_page import AIChatSupplierPage
+from views.pages.supplier_orders_page import SupplierOrdersPage
 
 
 class SideMenu(QFrame):
@@ -56,9 +56,7 @@ class SideMenu(QFrame):
             ("orders", "ניהול הזמנות"),
             ("products", "ניהול מוצרים"),
             ("links", "קישורים עם בעלי חנויות"),
-            ("reports", "דוחות מכירות"),
-            ("settings", "הגדרות ספק"),
-            ("help", "עזרה ותמיכה")
+            ("ai_chat", "שיחה עם העוזר הדיגיטלי"),  # הוספת פריט הצ'אט
         ]
         
         menu_container = QWidget()
@@ -80,7 +78,7 @@ class SideMenu(QFrame):
         return btn
         
     def on_menu_click(self, action: str):
-        if action in ["orders", "products", "links"]:
+        if action in ["orders", "products", "links", "ai_chat"]:  # הוספת ai_chat לפעולות זמינות
             self.page_requested.emit(action)
             self.hide()
         else:
@@ -96,15 +94,15 @@ class SideMenu(QFrame):
             }
             
             QFrame#menuHeader {
-                background: #f8fafc;
-                border-bottom: 1px solid #e5e7eb;
+                background: #f0fdf4;
+                border-bottom: 1px solid #dcfce7;
                 border-radius: 0px 8px 0px 0px;
             }
             
             QLabel#menuTitle {
                 font-size: 18px;
                 font-weight: 700;
-                color: #111827;
+                color: #047857;
             }
             
             QPushButton#closeBtn {
@@ -176,17 +174,21 @@ class SupplierHome(QWidget):
         self.content_stack = QStackedWidget()
         self.content_stack.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # Page 1: Orders list (default) - משתמש בעמוד החדש!
+        # Page 0: Orders list (default)
         orders_page = self.create_orders_page()
         self.content_stack.addWidget(orders_page)
         
-        # Page 2: Products management
+        # Page 1: Products management
         products_page = self.create_products_page()
         self.content_stack.addWidget(products_page)
         
-        # Page 3: Links management
+        # Page 2: Links management
         links_page = self.create_links_page()
         self.content_stack.addWidget(links_page)
+        
+        # Page 3: AI Chat (חדש!)
+        ai_chat_page = AIChatSupplierPage(self.user_data)
+        self.content_stack.addWidget(ai_chat_page)
         
         scroll_area.setWidget(self.content_stack)
         main_layout.addWidget(scroll_area, 1)
@@ -204,9 +206,9 @@ class SupplierHome(QWidget):
         content_layout.setContentsMargins(16, 16, 16, 16)
         content_layout.setSpacing(20)
         
-        # Orders page - משתמש בעמוד החדש במקום הוידג'ט הישן
+        # Orders page - משתמש בעמוד החדש במקום ווידג'ט הישן
         supplier_id = self.user_data.get('id')
-        self.orders_page = SupplierOrdersPage(supplier_id)  # שינוי חשוב!
+        self.orders_page = SupplierOrdersPage(supplier_id)
         self.orders_page.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         content_layout.addWidget(self.orders_page, 1)
                 
@@ -291,7 +293,7 @@ class SupplierHome(QWidget):
             
         title = QLabel(title_text)
         title.setObjectName("title")
-        title.setAlignment(Qt.AlignCenter)   # מרכז את הטקסט
+        title.setAlignment(Qt.AlignCenter)
         
         # כפתורי ניווט בצד ימין
         nav_layout = QHBoxLayout()
@@ -305,22 +307,27 @@ class SupplierHome(QWidget):
         products_btn.setObjectName("primaryBtn")
         products_btn.clicked.connect(self.show_products_page)
 
+        # כפתור צ'אט AI חדש
+        ai_chat_btn = QPushButton("🤖 שיחה עם AI")
+        ai_chat_btn.setObjectName("aiChatBtn")
+        ai_chat_btn.clicked.connect(self.show_ai_chat_page)
+
         nav_layout.addWidget(orders_btn)
         nav_layout.addWidget(products_btn)
+        nav_layout.addWidget(ai_chat_btn)
 
         # כפתור התנתקות בצד שמאל
         logout_btn = QPushButton("התנתק")
         logout_btn.setObjectName("ghostBtn")
         logout_btn.clicked.connect(self.logout_requested.emit)
 
-        # סידור כללי בלייאאוט הראשי
+        # סידור כללי בליאאוט הראשי
         layout.addWidget(logout_btn)       # שמאל
         layout.addWidget(title, 1)         # מרכז עם stretch
         layout.addLayout(nav_layout)       # ימין (לפני הmenu button)
         layout.addWidget(menu_btn)         # ימין ביותר
         return topbar
 
-    
     def setup_styles(self):
         """סגנונות מעודכנים"""
         self.setStyleSheet("""
@@ -345,7 +352,7 @@ class SupplierHome(QWidget):
             }
             QPushButton#menuBtn:hover {
                 background: #f9fafb;
-                border-color: #228B22;
+                border-color: #10b981;
             }
             QPushButton#menuBtn:pressed {
                 background: #f3f4f6;
@@ -358,7 +365,7 @@ class SupplierHome(QWidget):
             }
             
             QPushButton#primaryBtn {
-                background: #008000;
+                background: #10b981;
                 color: #ffffff;
                 border: 1px solid #059669;
                 border-radius: 10px;
@@ -386,23 +393,41 @@ class SupplierHome(QWidget):
             }
             QPushButton#secondaryBtn:hover {
                 background: #f9fafb;
-                border-color: #008000;
-                color: #228B22;
+                border-color: #10b981;
+                color: #10b981;
+            }
+            
+            QPushButton#aiChatBtn {
+                background: #16a34a;
+                color: #ffffff;
+                border: 1px solid #15803d;
+                border-radius: 10px;
+                padding: 8px 12px;
+                font-weight: 600;
+                min-width: 120px;
+            }
+            QPushButton#aiChatBtn:hover {
+                background: #15803d;
+                transform: translateY(-1px);
+            }
+            QPushButton#aiChatBtn:pressed {
+                background: #166534;
+                transform: translateY(0px);
             }
             
             QPushButton#ghostBtn {
-    background: #ffffff;
-    color: #111827;
-    border: 1px solid #dc2626;
-    border-radius: 10px;
-    padding: 8px 12px;
-    font-weight: 500;
-}
-QPushButton#ghostBtn:hover {
-    background: #fef2f2;
-    border-color: #b91c1c;
-    color: #dc2626;
-}
+                background: #ffffff;
+                color: #111827;
+                border: 1px solid #dc2626;
+                border-radius: 10px;
+                padding: 8px 12px;
+                font-weight: 500;
+            }
+            QPushButton#ghostBtn:hover {
+                background: #fef2f2;
+                border-color: #b91c1c;
+                color: #dc2626;
+            }
         """)
     
     # Navigation methods
@@ -411,7 +436,8 @@ QPushButton#ghostBtn:hover {
         page_mapping = {
             "orders": 0,
             "products": 1, 
-            "links": 2
+            "links": 2,
+            "ai_chat": 3  # הוספת מיפוי לצ'אט AI
         }
         
         if page in page_mapping:
@@ -429,6 +455,10 @@ QPushButton#ghostBtn:hover {
     def show_links_page(self):
         """מעבר לעמוד קישורים"""
         self.show_page("links")
+        
+    def show_ai_chat_page(self):
+        """מעבר לעמוד צ'אט AI"""
+        self.show_page("ai_chat")
     
     def update_buttons_state(self, active_page: str):
         """עדכון מראה הכפתורים לפי העמוד הפעיל"""
@@ -439,23 +469,31 @@ QPushButton#ghostBtn:hover {
             
         orders_btn = None
         products_btn = None
+        ai_chat_btn = None
         
         for btn in topbar.findChildren(QPushButton):
             if btn.text() == "רשימת הזמנות":
                 orders_btn = btn
             elif btn.text() == "ניהול מוצרים":
                 products_btn = btn
+            elif "שיחה עם AI" in btn.text():
+                ai_chat_btn = btn
         
-        if active_page == "orders":
-            if orders_btn:
-                orders_btn.setObjectName("primaryBtn")
-            if products_btn:
-                products_btn.setObjectName("secondaryBtn")
-        else:  # products or links
-            if orders_btn:
-                orders_btn.setObjectName("secondaryBtn")
-            if products_btn:
-                products_btn.setObjectName("primaryBtn")
+        # איפוס כל הכפתורים
+        if orders_btn:
+            orders_btn.setObjectName("secondaryBtn")
+        if products_btn:
+            products_btn.setObjectName("secondaryBtn")
+        if ai_chat_btn:
+            ai_chat_btn.setObjectName("secondaryBtn")
+            
+        # הפעלת הכפתור הנוכחי
+        if active_page == "orders" and orders_btn:
+            orders_btn.setObjectName("primaryBtn")
+        elif active_page in ["products", "links"] and products_btn:
+            products_btn.setObjectName("primaryBtn")
+        elif active_page == "ai_chat" and ai_chat_btn:
+            ai_chat_btn.setObjectName("aiChatBtn")
         
         # רענון הסגנון
         self.setup_styles()
@@ -481,9 +519,10 @@ QPushButton#ghostBtn:hover {
         self.side_menu.move(menu_x, menu_y)
         self.side_menu.show()
         self.side_menu.raise_()
-        def hide_side_menu(self):
-            """הסתרת התפריט הצידי"""
-            self.side_menu.hide()
+        
+    def hide_side_menu(self):
+        """הסתרת התפריט הצידי"""
+        self.side_menu.hide()
         
     # Event handlers המקוריים
     def show_menu(self):
@@ -507,4 +546,4 @@ QPushButton#ghostBtn:hover {
         elif hasattr(current_widget, 'refresh'):
             current_widget.refresh()
         
-        QMessageBox.information(self, "רענון", "כל הנתונים רועננו בהצלחה!")
+        QMessageBox.information(self, "רענון", "כל הנתונים רוענו בהצלחה!")
