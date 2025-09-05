@@ -1,7 +1,7 @@
 # frontend/views/widgets/store_owner_orders_row.py
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton, QFrame,
-    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox
+    QTableWidget, QTableWidgetItem, QHeaderView, QMessageBox, QSizePolicy, QAbstractScrollArea
 )
 from PySide6.QtCore import Qt, Signal
 from typing import Dict
@@ -59,7 +59,7 @@ class StoreOwnerOrdersRow(QWidget):
         layout.setDirection(QHBoxLayout.RightToLeft)  # סידור מימין לשמאל
         
         # כפתור הרחבה - מימין ביותר
-        expand_btn = QPushButton("🔽" if not self.is_expanded else "🔼")
+        expand_btn = QPushButton("<" if not self.is_expanded else "v")
         expand_btn.setObjectName("expandBtn")
         expand_btn.setFixedSize(40, 30)
         expand_btn.clicked.connect(
@@ -177,9 +177,10 @@ class StoreOwnerOrdersRow(QWidget):
         layout.setContentsMargins(24, 20, 24, 20)
         layout.setSpacing(16)
         
-        # פרטי הספק ואיש קשר
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(8)
+        # פרטי הספק ואיש קשר - בשורה אחת
+        info_layout = QHBoxLayout()  # שונה מ-QVBoxLayout ל-QHBoxLayout
+        info_layout.setSpacing(30)  # רווח בין האלמנטים
+        info_layout.setDirection(QHBoxLayout.RightToLeft)  # כיוון מימין לשמאל
         
         supplier_name = self.order.get("owner_company", "")
         contact_name = self.order.get("owner_name", "")
@@ -187,42 +188,80 @@ class StoreOwnerOrdersRow(QWidget):
         created_date = self.order.get("created_date", "")
         
         if supplier_name:
+            supplier_container = QWidget()
+            supplier_layout = QHBoxLayout(supplier_container)
+            supplier_layout.setContentsMargins(0, 0, 0, 0)
+            supplier_layout.setSpacing(8)
+            supplier_layout.setDirection(QHBoxLayout.RightToLeft)
+
             supplier_label = QLabel("שם הספק:")
             supplier_label.setObjectName("detailLabel")
             supplier_value = QLabel(supplier_name)
             supplier_value.setObjectName("detailValue")
-            info_layout.addWidget(supplier_label)
-            info_layout.addWidget(supplier_value)
+            
+            supplier_layout.addWidget(supplier_label)
+            supplier_layout.addWidget(supplier_value)
+            info_layout.addWidget(supplier_container)
         
         if contact_name:
+            contact_container = QWidget()
+            contact_layout = QHBoxLayout(contact_container)
+            contact_layout.setContentsMargins(0, 0, 0, 0)
+            contact_layout.setSpacing(8)
+            contact_layout.setDirection(QHBoxLayout.RightToLeft)
+            
             contact_label = QLabel("איש קשר:")
             contact_label.setObjectName("detailLabel")
             contact_value = QLabel(contact_name)
             contact_value.setObjectName("detailValue")
-            info_layout.addWidget(contact_label)
-            info_layout.addWidget(contact_value)
+            
+            contact_layout.addWidget(contact_label)
+            contact_layout.addWidget(contact_value)
+            info_layout.addWidget(contact_container)
         
         if phone:
+            phone_container = QWidget()
+            phone_layout = QHBoxLayout(phone_container)
+            phone_layout.setContentsMargins(0, 0, 0, 0)
+            phone_layout.setSpacing(8)
+            phone_layout.setDirection(QHBoxLayout.RightToLeft)
+            
             phone_label = QLabel("טלפון:")
             phone_label.setObjectName("detailLabel")
             phone_value = QLabel(phone)
             phone_value.setObjectName("detailValue")
-            info_layout.addWidget(phone_label)
-            info_layout.addWidget(phone_value)
+            
+            phone_layout.addWidget(phone_label)
+            phone_layout.addWidget(phone_value)
+            info_layout.addWidget(phone_container)
         
         # שעת הזמנה אם יש
         if created_date:
             try:
                 dt = datetime.fromisoformat(created_date.replace('Z', '+00:00'))
                 time_str = dt.strftime("%H:%M")
+                
+                time_container = QWidget()
+                time_layout = QHBoxLayout(time_container)
+                time_layout.setContentsMargins(0, 0, 0, 0)
+                time_layout.setSpacing(8)
+                time_layout.setDirection(QHBoxLayout.RightToLeft)
+
+
+                
                 hours_label = QLabel("שעת הזמנה:")
                 hours_label.setObjectName("detailLabel")
                 hours_value = QLabel(f"{time_str}")
                 hours_value.setObjectName("detailValue")
-                info_layout.addWidget(hours_label)
-                info_layout.addWidget(hours_value)
+                
+                time_layout.addWidget(hours_label)
+                time_layout.addWidget(hours_value)
+                info_layout.addWidget(time_container)
             except:
                 pass
+        
+        # הוספת stretch כדי ליישר את הפרטים לימין
+        info_layout.addStretch()
         
         layout.addLayout(info_layout)
         
@@ -245,13 +284,12 @@ class StoreOwnerOrdersRow(QWidget):
                 table.setItem(row, 3, QTableWidgetItem(f"₪ {item.get('unit_price', 0):.2f}"))
             
             table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-            table.setMaximumHeight(300)
             table.setAlternatingRowColors(True)
             
             layout.addWidget(table)
         
         return details
-    
+        
     def setup_styles(self):
         """הגדרת סגנונות CSS לטבלה מסונכרנת"""
         self.setStyleSheet("""
@@ -268,7 +306,7 @@ class StoreOwnerOrdersRow(QWidget):
         }
         
         QLabel#orderCell {
-            padding: 14px 4px;
+            padding: 8px 4px;
             color: #1e40af;
             font-size: 14px;
             font-weight: 500;

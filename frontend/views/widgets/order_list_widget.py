@@ -37,7 +37,7 @@ class OrderRowWidget(QFrame):
         layout.setDirection(QHBoxLayout.RightToLeft)  # סידור מימין לשמאל
         
         # כפתור הרחבה - מימין ביותר (40px)
-        expand_btn = QPushButton("🔽" if not self.is_expanded else "🔼")
+        expand_btn = QPushButton("<" if not self.is_expanded else "v")
         expand_btn.setObjectName("expandBtn")
         expand_btn.setFixedSize(40, 30)
         expand_btn.clicked.connect(lambda _=False, oid=self.order_id: self.expand_requested.emit(oid))
@@ -101,20 +101,20 @@ class OrderRowWidget(QFrame):
     def create_action_widget(self) -> QWidget:
         """
         עמודת פעולה עבור ספק:
-        - 'בוצעה'   -> כפתור 'לאישור קבלת ההזמנה' (מעביר ל'בתהליך')
-        - 'בתהליך' -> טקסט 'ממתין לאישור בעל החנות'
+        - 'בוצעה'   -> כפתור 'אישור ושליחה' (מעביר ל'בתהליך')
+        - 'בתהליך' -> טקסט 'נשלח... ממתין להגעה'
         - 'הושלמה' -> טקסט 'ההזמנה הושלמה'
         """
         status = self.order.get("status", "בתהליך")
 
         if status == "בוצעה":
-            btn = QPushButton("לאישור קבלת ההזמנה")
+            btn = QPushButton("אישור ושליחה")
             btn.setObjectName("statusBtnPending")
             btn.clicked.connect(lambda _=False: self.status_update_requested.emit(self.order_id, "בתהליך"))
             return btn
 
         elif status == "בתהליך":
-            lbl = QLabel("ממתין לאישור בעל החנות")
+            lbl = QLabel("נשלח... ממתין להגעה")
             lbl.setObjectName("orderCell")
             lbl.setAlignment(Qt.AlignCenter)
             return lbl
@@ -153,8 +153,9 @@ class OrderDetailsWidget(QFrame):
         layout.setSpacing(16)
         
         # פרטי החנות ואיש קשר
-        info_layout = QVBoxLayout()
-        info_layout.setSpacing(8)
+        info_layout = QHBoxLayout()
+        info_layout.setSpacing(30)
+
         
         # הוספת פרטים שונים
         self.add_detail(info_layout, "שם החנות:", self.order.get("owner_company", ""))
@@ -171,6 +172,7 @@ class OrderDetailsWidget(QFrame):
             except:
                 pass
         
+        info_layout.addStretch()
         layout.addLayout(info_layout)
         
         # טבלת מוצרים
@@ -183,15 +185,23 @@ class OrderDetailsWidget(QFrame):
             table = self.create_products_table(items)
             layout.addWidget(table)
     
-    def add_detail(self, layout: QVBoxLayout, label_text: str, value: str):
+    def add_detail(self, layout: QHBoxLayout, label_text: str, value: str):
         """Add a detail label and value if value exists"""
         if value:
+            detail_container = QWidget()
+            detail_layout = QHBoxLayout(detail_container)
+            detail_layout.setContentsMargins(0, 0, 0, 0)
+            detail_layout.setSpacing(8)
+            detail_layout.setDirection(QHBoxLayout.RightToLeft)
+            
             label = QLabel(label_text)
             label.setObjectName("detailLabel")
             value_label = QLabel(value)
             value_label.setObjectName("detailValue")
-            layout.addWidget(label)
-            layout.addWidget(value_label)
+            
+            detail_layout.addWidget(label)
+            detail_layout.addWidget(value_label)
+            layout.addWidget(detail_container)
     
     def create_products_table(self, items: list) -> QTableWidget:
         """Create products table with RTL headers"""
@@ -293,7 +303,7 @@ QLabel#orderCell:first-child {
 
 /* כפתורי פעולה בתוך הטבלה */
 QPushButton#statusBtnPending {
-    background: #f59e0b;
+    background: #008000;
     color: white;
     border: none;
     border-radius: 20px;
@@ -303,11 +313,11 @@ QPushButton#statusBtnPending {
     margin: 4px;
 }
 QPushButton#statusBtnPending:hover {
-    background: #d97706;
+    background: #228B22;
 }
 
 QPushButton#statusBtnActive {
-    background: #3b82f6;
+    background: #008000;
     color: white;
     border: none;
     border-radius: 20px;
@@ -317,7 +327,7 @@ QPushButton#statusBtnActive {
     margin: 4px;
 }
 QPushButton#statusBtnActive:hover {
-    background: #2563eb;
+    background: #228B22;
 }
 
 /* כפתור הרחבה בטבלה */
@@ -326,13 +336,13 @@ QPushButton#expandBtn {
     border: 1px solid #93c5fd;
     border-radius: 6px;
     font-size: 14px;
-    padding: 4px;
-    color: #2563eb;
+    padding: 2px;
+    color: #008000;
     margin: 2px;
 }
 QPushButton#expandBtn:hover {
-    background: #eff6ff;
-    border-color: #2563eb;
+    background: #008000;
+    border-color: #228B22;
 }
 
 /* פרטים מורחבים */

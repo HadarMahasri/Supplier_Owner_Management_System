@@ -179,7 +179,7 @@ class StoreOwnerOrdersFilterBar(QWidget):
         }
         
         QPushButton#historyBtn {
-            background: #8b5cf6;
+            background: #0891b2;
             color: white;
             border: none;
             border-radius: 10px;
@@ -188,7 +188,7 @@ class StoreOwnerOrdersFilterBar(QWidget):
             font-size: 14px;
         }
         QPushButton#historyBtn:hover {
-            background: #7c3aed;
+            background: #06b6d4;
         }
         """)
     
